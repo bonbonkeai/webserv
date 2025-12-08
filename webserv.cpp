@@ -1,0 +1,65 @@
+#include <iostream>
+#include <string>
+#include <stdexcept>
+#include "Config/hpp/ConfigParser.hpp"
+#include "Event/hpp/Server.hpp"                        
+
+int main(int ac, char** av)
+{
+    try
+    {
+        // 1. 确定配置文件路径
+        std::string configPath;
+        if (ac == 1)
+        {
+            // 如果不传参数，使用默认配置文件
+            configPath = "config/default.conf";
+        }
+        else if (ac == 2)
+        {
+            configPath = av[1];
+        }
+        else
+        {
+            std::cerr << " Usage: ./webserv [config_file] " << std::endl;
+            return (1);
+        }
+        std::cout << " Using config file: " << configPath << std::endl;
+        // 2. 解析配置文件（A模块）
+        ConfigParser parser;
+        std::vector<ServerConfig> serverConfigs;
+        try
+        {
+            serverConfigs = parser.parse(configPath);
+        }
+        catch (std::exception& e)
+        {
+            std::cerr << "[ERROR] Config error: " << e.what() << std::endl;
+            return (1) ;
+        }
+        if (serverConfigs.empty())
+        {
+            std::cerr << "[ERROR] No valid server blocks found." << std::endl;
+            return (1);
+        }
+        std::cout << " Config loaded. Servers: "
+                  << serverConfigs.size() << std::endl;
+        // 3. 初始化服务器（B模块）
+        // Server 内部会：
+        // - 创建所有监听 socket
+        // - 设置 non-blocking
+        // - 加入 poll()
+        Server webserver(serverConfigs);       
+        std::cout << " Initialization complete. Entering event loop..." << std::endl;
+        // 4. 进入事件循环（poll()）
+        webserver.run();
+        std::cout << " Server shutdown." << std::endl;
+    }
+    catch (std::exception& e)
+    {
+        std::cerr << "[FATAL] " << e.what() << std::endl;
+        return (1);
+    }
+    return (0);
+}
+       
