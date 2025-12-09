@@ -30,13 +30,13 @@ int main(int ac, char** av)
         std::vector<ServerConfig> serverConfigs;
         try
         {
-            //调用 ConfigParser 解析配置 → 得到 server 配置树
+            //调用 ConfigParser 解析配置 → 得到 server
             serverConfigs = parser.parse(configPath);
         }
         catch (std::exception& e)
         {
             std::cerr << "[ERROR] Config error: " << e.what() << std::endl;
-            return (1) ;
+            return (1);
         }
         if (serverConfigs.empty())
         {
@@ -46,10 +46,6 @@ int main(int ac, char** av)
         std::cout << " Config loaded. Servers: "
                   << serverConfigs.size() << std::endl;
         // 3. 初始化服务器（B模块）实例化 Server（事件循环的总控类）
-        // Server 内部会：
-        // - 创建所有监听 socket
-        // - 设置 non-blocking
-        // - 加入 poll()
         Server webserver(serverConfigs);       
         std::cout << " Initialization complete. Entering event loop..." << std::endl;
         // 4. 进入事件循环（poll()）
