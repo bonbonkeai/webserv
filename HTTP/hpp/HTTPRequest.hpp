@@ -1,6 +1,10 @@
-#endif
+#ifndef HTTPREQUEST_HPP
+#define HTTPREQUEST_HPP
 
-纯数据结构：
+#include <string>
+#include <map>
+
+/*纯数据结构：
 method
 path
 query
@@ -10,15 +14,30 @@ body
 
 //不会包含业务逻辑，只负责存储解析后的结果。
 //只是一个容器存HTTP Parser解析后的结果
-//ex:
+*/
+
+
 class HTTPRequest
 {
 public:
-    std::string method;                  // GET / POST / DELETE
-    std::string path;                    // "/upload/image.png"
-    std::string query;                   // "user=alice&id=5"
-    std::string version;                 // "HTTP/1.1"
-    std::map<std::string, std::string> headers; // Host/User-Agent/Content-Type...
-    std::string body;                    // 请求体（CGI 或 POST 上传用）
+        HTTPRequest();
+        HTTPRequest(const HTTPRequest& copy);
+        HTTPRequest& operator=(const HTTPRequest& copy);
+        ~HTTPRequest();
+
+        std::string method;
+        std::string uri;//Comprendre le nom de web
+        std::string path;//seulement path 
+        std::string query;
+        std::string version;
+        std::string body;
+        std::map<std::string, std::string> headers;
+
+        size_t  contentLength;
+        bool    has_body;
+        bool    complet;
+        bool    bad_request;
+        bool    keep_alive;
 };
 
+#endif
