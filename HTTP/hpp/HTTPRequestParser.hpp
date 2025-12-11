@@ -2,6 +2,8 @@
 #define HTTPREQUESTPARSER_HPP
 
 #include "HTTP/hpp/HTTPRequest.hpp"
+#include <sstream>
+#include <algorithm>
 
 /*解析请求首行 METHOD URI VERSION
 解析 headers
