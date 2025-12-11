@@ -1,8 +1,24 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
+#include <map>
+#include <string>
+#include "Event/hpp/Client.hpp"
 
+class Server
+{
+public:
+        Server();
+        Server(const Server& copy);
+        Server& operator=(const Server& copy);
+        ~Server();
+private:
+        void acceptNewClient();
+        void handleReadable();
+        void handleWritable();
+        void cleanupClient();
 
+};
 
 /*初始化 listen sockets (根据 ServerConfig)
 设置为 non-blocking
@@ -17,5 +33,5 @@ while (running):
     if CGI pipe readable → read CGI output*/
 
 
-    
+
 #endif
