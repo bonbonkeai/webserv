@@ -49,7 +49,7 @@ enum ParseState
 	PARSE_DONE,
 	WAIT_RESPONSE,
 	CLOSE
-} State;
+};
 
 class HTTPRequestParser
 {
@@ -61,6 +61,8 @@ public:
 
 		const HTTPRequest&	getRequest() const;
 		bool	dejaParse(const std::string &newData);
+		void	reset();
+
 
 private:
 		HTTPRequest	_req;
@@ -74,7 +76,5 @@ private:
 		bool	parseBody();
 
 };
-
-
 
 #endif

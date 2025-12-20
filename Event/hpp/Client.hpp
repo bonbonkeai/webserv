@@ -4,7 +4,12 @@
 #include <string>
 #include "HTTP/hpp/HTTPRequest.hpp"
 #include "HTTP/hpp/HTTPRequestParser.hpp"
-#include "HTTP/hpp/HEETResponse.hpp"
+#include "HTTP/hpp/HTTPResponse.hpp"
+#include <iostream>
+#include <map>
+#include <iterator>
+#include <exception>
+
 
 /*表示一个客户端连接：
 成员包括：
@@ -15,52 +20,119 @@ keepAlive 状态
 lastActive 时间戳
 与 CGI 交互时的 cgiFd*/
 
-
-enum	ClientState
+enum Clientstate
 {
-	CLIENT_READING,
-	CLIENT_READY,
-	CLIENT_WRITING,
-	CLIENT_CLOSED
+    // RD_LINE,//is reading request line
+    // RD_HEADER, //is reading request header
+    // RD_BODY, //is reading request body
+    // RD_DONE, //reading finish 
+	// 这个是由HTTP parser来管的，不要再Client外层来管
+	READING,
+    PROCESS, //do the request 
+    WRITING,
+    CLOSED,
+    ERROR
 };
 
-class	Client
+struct Client
+{
+    int client_fd;
+
+    Clientstate _state;
+    std::string read_buffer;//仅用于暂存recv;parser会自带_buffer
+	HTTPRequestParser parser;
+
+    std::string write_buffer;
+    size_t write_pos;
+    bool is_keep_alive;    
+
+   Client(int fd = -1)
+    : client_fd(fd),
+      _state(READING),
+      read_buffer(),
+      parser(),
+      write_buffer(),
+      write_pos(0),
+      is_keep_alive(false)
+	{
+		read_buffer.reserve(4096);
+	}
+	void reset()
+	{
+		_state = READING;
+		read_buffer.clear();
+		write_buffer.clear();
+		write_pos = 0;
+		is_keep_alive = false;
+		parser.reset();
+	}
+    int get_fd()
+    {
+        return client_fd;
+    }
+};
+
+class ClientManager
 {
 public:
-		Client();
-		Client(int fd);
-		Client(const Client& copy);
-		Client& operator=(const Client& copy);
-		~Client();
+    ClientManager();
+    ~ClientManager();
 
-		int getFd() const;
-		bool isClosed() const;
-		bool isReady() const;
+    void add_client(int fd);
+    Client  &get_client(int fd);
+    void remove_client(int fd);
 
-		/*I/O*/
-		void readBuffer();
-		void writeBuffer();
-
-		/*state control*/
-		void markClosed();
-		void restForNextReq() const;
-
-		/*access parsed data*/
-		const HTTPRequest& getRequest() const;
-
-		/*set response*/
-		void setResponse(const HTTPResponse& resq);
 private:
-		int _clientFd;
-		ClientState _state;
-		/*parse http*/
-		HTTPRequestParser _httpParser;
-		bool	_reqComplet;
-		/*response buffer*/
-		std::string	_respBuffer;
-		size_t	_respSent;
+    std::map<int, Client> _clients;
 };
 
-
-
 #endif
+
+
+
+
+
+// enum	ClientState
+// {
+// 	CLIENT_READING,
+// 	CLIENT_READY,
+// 	CLIENT_WRITING,
+// 	CLIENT_CLOSED
+// };
+
+// class	Client
+// {
+// public:
+// 		Client();
+// 		Client(int fd);
+// 		Client(const Client& copy);
+// 		Client& operator=(const Client& copy);
+// 		~Client();
+
+// 		int getFd() const;
+// 		bool isClosed() const;
+// 		bool isReady() const;
+
+// 		/*I/O*/
+// 		void readBuffer();
+// 		void writeBuffer();
+
+// 		/*state control*/
+// 		void markClosed();
+// 		void restForNextReq() const;
+
+// 		/*access parsed data*/
+// 		const HTTPRequest& getRequest() const;
+
+// 		/*set response*/
+// 		void setResponse(const HTTPResponse& resq);
+// private:
+// 		int _clientFd;
+// 		ClientState _state;
+// 		/*parse http*/
+// 		HTTPRequestParser _httpParser;
+// 		bool	_reqComplet;
+// 		/*response buffer*/
+// 		std::string	_respBuffer;
+// 		size_t	_respSent;
+// };

@@ -1,23 +1,36 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
-#include <map>
-#include <string>
+#include "Event/hpp/PollManager.hpp"
 #include "Event/hpp/Client.hpp"
+#include "HTTP/hpp/ErrorResponse.hpp"
+#include <iostream>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <exception>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cerrno> 
 
-class Server
+class   Server
 {
-public:
+    public:
         Server();
-        Server(const Server& copy);
-        Server& operator=(const Server& copy);
         ~Server();
-private:
-        void acceptNewClient();
-        void handleReadable();
-        void handleWritable();
-        void cleanupClient();
+        bool    init_sockets();
+        void    run();
+        void    set_non_block_fd(int fd);
+        bool    handle_connection();
 
+        bool    do_read(Client& c);
+        bool    do_write(Client& c);
+
+    private:
+        //class de tous les configuration de server
+        int port_nbr;
+        int socketfd;
+        Epoller _epoller;
+        ClientManager   _manager;
 };
 
 /*初始化 listen sockets (根据 ServerConfig)

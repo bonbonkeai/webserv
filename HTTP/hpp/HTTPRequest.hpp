@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <cstddef>
 
 /*纯数据结构：
 method
@@ -38,6 +39,8 @@ public:
         bool    complet;
         bool    bad_request;
         bool    keep_alive;
+
+        // int     error_code;
 };
 
 #endif

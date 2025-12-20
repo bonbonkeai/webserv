@@ -3,6 +3,7 @@
 
 #include <string>
 #include "HTTP/hpp/HTTPResponse.hpp"
+#include "HTTP/hpp/HTTPUtils.hpp" 
 
 /*把 HTTPResponse 对象转成原始字节串
 ex:
@@ -17,10 +18,10 @@ Content-Length: 123\r\n
 class	ResponseBuilder
 {
 public:
-		ResponseBuilder();
-		ResponseBuilder(const ResponseBuilder& copy);
-		ResponseBuilder& operator=(const ResponseBuilder& copy);
-		~ResponseBuilder();
+		// ResponseBuilder();
+		// ResponseBuilder(const ResponseBuilder& copy);
+		// ResponseBuilder& operator=(const ResponseBuilder& copy);
+		// ~ResponseBuilder();
 		static std::string build(const HTTPResponse& resp);
 private:
 		static std::string buildStatusLine(const HTTPResponse &resp);
