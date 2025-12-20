@@ -1,6 +1,6 @@
 
-#ifndef POLLMANAGER_HPP
-#define POLLMANAGER_HPP
+#ifndef EPOLLMANAGER_HPP
+#define EPOLLMANAGER_HPP
 
 #include <sys/epoll.h>
 #include <exception>
