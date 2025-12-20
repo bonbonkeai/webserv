@@ -19,7 +19,7 @@ std::string ResponseBuilder::buildStatusLine(const HTTPResponse &resp)
 {
     std::ostringstream oss;
     oss << "HTTP/1.1 " << resp.statusCode << " " << resp.statusText << "\r\n";
-    return oss.str();
+    return (oss.str());
 }
 
 std::string ResponseBuilder::buildHeaders(const HTTPResponse &resp)
@@ -30,12 +30,12 @@ std::string ResponseBuilder::buildHeaders(const HTTPResponse &resp)
     {
         oss << it->first << ": " << it->second << "\r\n";
     }
-    return oss.str();
+    return (oss.str());
 }
 
 std::string ResponseBuilder::buildDataHeader()
 {
-    return "\r\n";
+    return ("\r\n");
 }
 
 std::string ResponseBuilder::build(const HTTPResponse& in)

@@ -230,18 +230,15 @@ bool Server::do_write(Client &c)
 {
     while (c.write_pos < c.write_buffer.size())
     {
-        ssize_t n = send(c.get_fd(),
-                         c.write_buffer.data() + c.write_pos,
-                         c.write_buffer.size() - c.write_pos,
-                         0);
+        ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
         if (n > 0) c.write_pos += n;
         else
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 return (false);
             c._state = ERROR;
-            return (true); // 让上层走 close
+            return (true); //让上层走 close
         }
     }
-    return (true); // 写完
+    return (true);//写完
 }

@@ -4,13 +4,14 @@ CFLAG = -Wall -Wextra -Werror -std=c++98
 
 INCLUDES = -I./includes -I.
 
-SRCS =	test_http_parser.cpp \
+SRCS =	test_http_parser.cpp  \
 		HTTP/cpp/HTTPRequest.cpp \
 		HTTP/cpp/HTTPRequestParser.cpp \
 		HTTP/cpp/HTTPResponse.cpp \
 		HTTP/cpp/ResponseBuilder.cpp \
 		HTTP/cpp/ErrorResponse.cpp \
-		HTTP/cpp/HTTPUtils.cpp
+		HTTP/cpp/HTTPUtils.cpp 
+
 	
 
 OBJS = $(SRCS:.cpp=.o)
