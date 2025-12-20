@@ -6,11 +6,11 @@ static void ensureRequiredHeaders(HTTPResponse& resp)
     if (resp.headers.find("content-length") == resp.headers.end())
         resp.headers["content-length"] = toString(resp.body.size());
 
-    // Connection: 先默认 close，后续你接 keep-alive 再覆盖
+    // Connection: 先默认 close，后续接 keep-alive 再覆盖
     if (resp.headers.find("connection") == resp.headers.end())
         resp.headers["connection"] = "close";
 
-    // Content-Type: 可选，但建议默认一个
+    // Content-Type: 默认一个
     if (resp.headers.find("content-type") == resp.headers.end())
         resp.headers["content-type"] = "text/plain; charset=utf-8";
 }
@@ -40,7 +40,7 @@ std::string ResponseBuilder::buildDataHeader()
 
 std::string ResponseBuilder::build(const HTTPResponse& in)
 {
-    // 这里需要 ensureRequiredHeaders，但 in 是 const，所以拷贝一份
+    // in是const，所以得拷贝一份
     HTTPResponse resp = in;
     ensureRequiredHeaders(resp);
     std::string out;

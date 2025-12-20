@@ -1,17 +1,16 @@
 #include "HTTP/hpp/ErrorResponse.hpp"
 
-
 static std::string reasonPhrase(int code)
 {
     switch (code)
     {
-        case 400: return "Bad Request";
-        case 403: return "Forbidden";
-        case 404: return "Not Found";
-        case 405: return "Method Not Allowed";
-        case 500: return "Internal Server Error";
-        case 505: return "HTTP Version Not Supported";
-        default:  return "Error";
+        case 400: return ("Bad Request");
+        case 403: return ("Forbidden");
+        case 404: return ("Not Found");
+        case 405: return ("Method Not Allowed");
+        case 500: return ("Internal Server Error");
+        case 505: return ("HTTP Version Not Supported");
+        default:  return ("Error");
     }
 }
 
