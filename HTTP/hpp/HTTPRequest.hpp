@@ -40,7 +40,11 @@ public:
         bool    bad_request;
         bool    keep_alive;
 
-        // int     error_code;
+        bool    has_content_length;
+        // bool    has_transfer_encoding;
+        // bool    chunked;
+
+        int     error_code;
 };
 
 #endif

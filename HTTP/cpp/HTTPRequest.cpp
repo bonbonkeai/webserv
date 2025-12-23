@@ -11,7 +11,9 @@ HTTPRequest::HTTPRequest() : method(""),
 			has_body(false),
 			complet(false),
 			bad_request(false),
-			keep_alive(false)
+			keep_alive(false),
+			has_content_length(false),
+			error_code(200)
 {
 }
 
@@ -27,7 +29,9 @@ HTTPRequest::HTTPRequest(const HTTPRequest& copy)
       has_body(copy.has_body),
       complet(copy.complet),
       bad_request(copy.bad_request),
-      keep_alive(copy.keep_alive)
+      keep_alive(copy.keep_alive),
+	  has_content_length(copy.has_content_length),
+	  error_code(copy.error_code)
 {
 }
 
@@ -47,6 +51,8 @@ HTTPRequest& HTTPRequest::operator=(const HTTPRequest& copy)
         complet = copy.complet;
         bad_request = copy.bad_request;
         keep_alive = copy.keep_alive;
+		has_content_length = copy.has_content_length;
+		error_code = copy.error_code;
     }
     return (*this);
 }

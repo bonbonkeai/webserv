@@ -24,7 +24,7 @@ HTTPResponse buildErrorResponse(int statusCode)
     body << statusCode << " " << r.statusText << "\n";
     r.body = body.str();
 
-    // 你 parser header key 是小写，所以这里也用小写
+    //parser header key 是小写，所以这里也用小写
     r.headers["content-type"] = "text/plain; charset=utf-8";
     r.headers["content-length"] = toString(r.body.size());
     r.headers["connection"] = "close";

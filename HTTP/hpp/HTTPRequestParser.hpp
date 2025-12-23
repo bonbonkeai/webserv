@@ -2,6 +2,7 @@
 #define HTTPREQUESTPARSER_HPP
 
 #include "HTTP/hpp/HTTPRequest.hpp"
+#include "HTTP/hpp/HTTPUtils.hpp" 
 #include <sstream>
 #include <algorithm>
 
@@ -63,7 +64,6 @@ public:
 		bool	dejaParse(const std::string &newData);
 		void	reset();
 
-
 private:
 		HTTPRequest	_req;
 		ParseState	_state;
@@ -74,7 +74,9 @@ private:
 		bool	parseRequestLine();
 		bool	parseHeaders();
 		bool	parseBody();
-
+		bool	isValidHeaderName(const std::string& key);
+		bool	parseContentLengthStrict(const std::string& v, std::size_t& out, std::size_t max_body);
+		bool	fail(int code);
 };
 
 #endif

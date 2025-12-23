@@ -74,6 +74,7 @@ static HTTPResponse process_request(const HTTPRequest& req)
     resp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
     return (resp);
 }
+
 bool Server::do_read(Client &c)
 {
     char tmp[4096];
@@ -89,7 +90,8 @@ bool Server::do_read(Client &c)
             {
                 c._state = ERROR;
                 // 生成错误响应//
-                ErrorResponse err = buildErrorResponse(400);
+                HTTPResponse err = buildErrorResponse(400);//暂时先放400，后续可以根据具体的error_code来修改
+                //HTTPResponse err = buildErrorResponse(c.parser.getRequest().error_code);
                 c.is_keep_alive = false;
                 c.write_buffer = ResponseBuilder::build(err);
                 c.write_pos = 0;

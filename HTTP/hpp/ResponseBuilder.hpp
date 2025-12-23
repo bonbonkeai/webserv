@@ -15,6 +15,7 @@ Content-Length: 123\r\n
 <body>
 
 //这就是写入 Client.writeBuffer 的内容。*/
+
 class	ResponseBuilder
 {
 public:
