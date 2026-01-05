@@ -1,5 +1,6 @@
 #include "Event/hpp/Server.hpp"
 #include <cstring>
+#include <sys/wait.h> 
 
 #define Timeout 50 // 50-100
 
@@ -130,6 +131,82 @@ bool Server::do_read(Client &c)
     // }
     // return (c._state == RD_DONE);
 }
+
+void    Server::handle_cgi_read(Client& c, int pipe_fd)
+{
+    char    buf[4096];
+    while (true)
+    {
+        ssize_t n = read(pipe_fd, buf, sizeof(buf));
+        if (n > 0)
+            c._cgi.append_to_client(c, buf, n);
+        else if (n == 0) //cgi finish
+        {
+            _epoller.del_event(pipe_fd);
+            close(pipe_fd);
+            _manager.del_cgi_fd(pipe_fd);
+            waitpid(c._cgi.get_pid(), NULL, WNOHANG);
+            //client prepare la reponse
+            c._state = WRITING;
+            _epoller.modif_event(c.client_fd, EPOLLOUT|EPOLLET);
+            break ;
+        }
+        else
+        {
+            if (errno == EAGAIN)
+                break;
+            else //error traitement
+            {
+                c._state = ERROR;
+
+            }
+        }
+
+    }
+}
+
+
+/**
+ * run 中epoller的event的fd进行检查
+ *  1. 此fd是socketfd ->handle connection
+ *  2. 此fd是client socket -> 
+ *  3. 此fd是cgi pipe的output
+ *  4. 什么也不是，error处理
+ */
+void    Server::run()
+{
+    set_non_block_fd(socketfd);
+    _epoller.add_event(socketfd, EPOLLIN|EPOLLET);
+    while (true)
+    {
+        int nfds = _epoller.wait(Timeout);
+        for(int i = 0; i < nfds; i++)
+        {
+            int fd = _epoller.get_event_fd(i);
+            uint32_t    events = _epoller.get_event_type(i);
+            if (fd == socketfd)
+                handle_connection();
+            else if (_manager.is_cgi_pipe(fd))
+            {
+                Client* c = _manager.get_client_by_cgi_fd(fd);
+                if (c && (events & EPOLLIN))
+                    handle_cgi_read(*c, fd);
+            }
+            else
+            {
+                Client* c = _manager.get_client(fd);
+                if (!c)
+                    continue;
+                if (events & EPOLLIN)
+                    do_read(*c);
+                if (events & EPOLLOUT)
+                    do_write(*c);
+            }
+        }
+    }
+}
+
+
 
 void Server::run()
 {

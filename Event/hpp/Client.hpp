@@ -5,12 +5,13 @@
 #include "HTTP/hpp/HTTPRequest.hpp"
 #include "HTTP/hpp/HTTPRequestParser.hpp"
 #include "HTTP/hpp/HTTPResponse.hpp"
+#include "CGI/hpp/CGIProcess.hpp"
 #include <iostream>
 #include <map>
 #include <iterator>
 #include <exception>
 
-
+class   CGI_Process;
 /*表示一个客户端连接：
 成员包括：
 readBuffer / writeBuffer
@@ -25,10 +26,10 @@ enum Clientstate
     // RD_LINE,//is reading request line
     // RD_HEADER, //is reading request header
     // RD_BODY, //is reading request body
-    // RD_DONE, //reading finish 
-	// 这个是由HTTP parser来管的，不要再Client外层来管
-	READING,
-    PROCESS, //do the request 
+    // RD_DONE, //reading finish
+    // 这个是由HTTP parser来管的，不要再Client外层来管
+    READING,
+    PROCESS, // do the request
     WRITING,
     CLOSED,
     ERROR
@@ -39,33 +40,36 @@ struct Client
     int client_fd;
 
     Clientstate _state;
-    std::string read_buffer;//仅用于暂存recv;parser会自带_buffer
-	HTTPRequestParser parser;
+    std::string read_buffer; // 仅用于暂存recv;parser会自带_buffer
+    HTTPRequestParser parser;
 
     std::string write_buffer;
     size_t write_pos;
-    bool is_keep_alive;    
+    bool is_keep_alive;
 
-   Client(int fd = -1)
-    : client_fd(fd),
-      _state(READING),
-      read_buffer(),
-      parser(),
-      write_buffer(),
-      write_pos(0),
-      is_keep_alive(false)
-	{
-		read_buffer.reserve(4096);
-	}
-	void reset()
-	{
-		_state = READING;
-		read_buffer.clear();
-		write_buffer.clear();
-		write_pos = 0;
-		is_keep_alive = false;
-		parser.reset();
-	}
+    // cgi
+    CGI_Process  _cgi;
+    bool    is_cgi;
+
+    Client(int fd = -1) : client_fd(fd),
+                          _state(READING),
+                          read_buffer(),
+                          parser(),
+                          write_buffer(),
+                          write_pos(0),
+                          is_keep_alive(false)
+    {
+        read_buffer.reserve(4096);
+    }
+    void reset()
+    {
+        _state = READING;
+        read_buffer.clear();
+        write_buffer.clear();
+        write_pos = 0;
+        is_keep_alive = false;
+        parser.reset();
+    }
     int get_fd()
     {
         return client_fd;
@@ -79,18 +83,21 @@ public:
     ~ClientManager();
 
     void add_client(int fd);
-    Client  &get_client(int fd);
+    Client *get_client(int fd);
     void remove_client(int fd);
 
+    //gestion cgi client
+    Client* get_client_by_cgi_fd(int pipe_fd);
+    bool    is_cgi_pipe(int pipe_fd);
+    void    del_cgi_fd(int pipe_fd);
+    void    bind_cgi_fd(int pipe_fd, int client_fd);
+
 private:
-    std::map<int, Client> _clients;
+    std::map<int, Client *> _clients;     // socket_fd -> client*
+    std::map<int, Client *> _cgi_manager; // pipe_fd -> client*
 };
 
 #endif
-
-
-
-
 
 // enum	ClientState
 // {

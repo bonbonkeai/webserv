@@ -1,9 +1,64 @@
+#ifndef CGIPROCESS_HPP
+#define CGIPROCESS_HPP
+
+#include "../../HTTP/hpp/HTTPRequest.hpp"
+#include "../../HTTP/hpp/HTTPResponse.hpp"
+#include "Event/hpp/Client.hpp"
+
+#include <iostream>
+#include <vector>
+#include <map>
+#include <iterator>
+#include <unistd.h>
+#include <algorithm>
+
+struct  CGI_ENV
+{
+    std::vector<std::string>    env_str;
+    std::vector<char*>  envp;
+
+    void    final_env()
+    {
+        for(size_t i = 0; i < env_str.size(); i++)
+            envp.push_back((char*)env_str[i].c_str());
+        envp.push_back(NULL);
+    }
+};
+
+class CGI_Process
+{
+private:
+    pid_t _pid;
+    int _read_fd;
+
+public:
+    CGI_Process();
+    ~CGI_Process();
+
+    std::string format_header_key(const std::string &key);
+    CGI_ENV get_env_from_request(HTTPRequest &req);
+    bool execute(const std::string &script_path, HTTPRequest &req);
+    void    reset()
+    {
+        _pid = -1;
+        _read_fd = -1;
+    }
+    void    append_to_client(Client& c, const char* buf, size_t n)
+    {
+        c.write_buffer.append(buf, n);
+    }
+    pid_t   get_pid()
+    {
+        return _pid;
+    }
+};
+
 #endif
 
 完整 CGI 子进程管理：
-建立 pipe
-fork
-子进程 dup2 → execve
-父进程写 body 到 stdin
-父进程将 stdout fd 加入 B 的 poll
-解析完毕后返回到 Request handle。
+    建立 pipe
+    fork
+    子进程 dup2 → execve
+    父进程写 body 到 stdin
+    父进程将 stdout fd 加入 B 的 poll
+    解析完毕后返回到 Request handle。

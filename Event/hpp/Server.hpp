@@ -1,7 +1,7 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
-#include "Event/hpp/PollManager.hpp"
+#include "Event/hpp/EpollManager.hpp"
 #include "Event/hpp/Client.hpp"
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include <iostream>
@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <cerrno> 
 
+class   Epoller;
 class   Server
 {
     public:
@@ -21,6 +22,7 @@ class   Server
         void    run();
         void    set_non_block_fd(int fd);
         bool    handle_connection();
+        void    handle_cgi_read(Client& c, int pipe_fd);
 
         bool    do_read(Client& c);
         bool    do_write(Client& c);
