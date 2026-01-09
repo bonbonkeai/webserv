@@ -3,6 +3,7 @@
 
 #include <string>
 #include <sstream>
+#include <algorithm>
 
 std::string toString(std::size_t n);
 void toLowerInPlace(std::string& s);

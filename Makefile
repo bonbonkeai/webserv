@@ -4,13 +4,17 @@ CFLAG = -Wall -Wextra -Werror -std=c++98
 
 INCLUDES = -I./includes -I.
 
-SRCS =	test_http_parser.cpp  \
+SRCS =	main.cpp  \
 		HTTP/cpp/HTTPRequest.cpp \
 		HTTP/cpp/HTTPRequestParser.cpp \
 		HTTP/cpp/HTTPResponse.cpp \
 		HTTP/cpp/ResponseBuilder.cpp \
 		HTTP/cpp/ErrorResponse.cpp \
-		HTTP/cpp/HTTPUtils.cpp 
+		HTTP/cpp/HTTPUtils.cpp \
+		Event/cpp/Server.cpp\
+		Event/cpp/EpollManager.cpp\
+		Event/cpp/Client.cpp\
+		CGI/cpp/CGIProcess.cpp
 
 	
 

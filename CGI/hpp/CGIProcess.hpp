@@ -11,18 +11,25 @@
 #include <iterator>
 #include <unistd.h>
 #include <algorithm>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
 
-struct  CGI_ENV
+struct Client;
+struct CGI_ENV
 {
-    std::vector<std::string>    env_str;
-    std::vector<char*>  envp;
+    std::vector<std::string> env_str;
+    std::vector<char *> envp;
 
-    void    final_env()
+    void final_env()
     {
-        for(size_t i = 0; i < env_str.size(); i++)
-            envp.push_back((char*)env_str[i].c_str());
+        for (size_t i = 0; i < env_str.size(); i++)
+            envp.push_back((char *)env_str[i].c_str());
         envp.push_back(NULL);
     }
+    ~CGI_ENV() {}
 };
 
 class CGI_Process
@@ -30,35 +37,36 @@ class CGI_Process
 private:
     pid_t _pid;
     int _read_fd;
+    int _write_fd;
+    std::string _output_buffer;
 
 public:
     CGI_Process();
     ~CGI_Process();
 
     std::string format_header_key(const std::string &key);
-    CGI_ENV get_env_from_request(HTTPRequest &req);
+    CGI_ENV get_env_from_request(HTTPRequest &req); // 可能还需要别的内容
     bool execute(const std::string &script_path, HTTPRequest &req);
-    void    reset()
-    {
-        _pid = -1;
-        _read_fd = -1;
-    }
-    void    append_to_client(Client& c, const char* buf, size_t n)
-    {
-        c.write_buffer.append(buf, n);
-    }
-    pid_t   get_pid()
+    void reset();
+    void append_output(const char *buf, size_t n);
+    void set_non_block_fd(int fd);
+
+    pid_t get_pid() const
     {
         return _pid;
+    }
+    int get_read_fd() const
+    {
+        return _read_fd;
     }
 };
 
 #endif
 
-完整 CGI 子进程管理：
-    建立 pipe
-    fork
-    子进程 dup2 → execve
-    父进程写 body 到 stdin
-    父进程将 stdout fd 加入 B 的 poll
-    解析完毕后返回到 Request handle。
+// 完整 CGI 子进程管理：
+//     建立 pipe
+//     fork
+//     子进程 dup2 → execve
+//     父进程写 body 到 stdin
+//     父进程将 stdout fd 加入 B 的 poll
+//     解析完毕后返回到 Request handle。
