@@ -61,7 +61,7 @@ bool Server::handle_connection()
 }
 
 // 暂时还不做业务 handle，所以 process_request 的最小实现就返回一个固定 body，同时把 keep-alive 从 request 带过来。
-//static HTTPResponse process_request(const HTTPRequest &req)
+// static HTTPResponse process_request(const HTTPRequest &req)
 //{
 //    if (req.bad_request)
 //        return buildErrorResponse(400);
@@ -79,7 +79,7 @@ bool Server::handle_connection()
 bool Server::do_read(Client &c)
 {
     char tmp[4096];
-   // bool is_reading = true;
+    // bool is_reading = true;
 
     while (true)
     {
@@ -131,16 +131,16 @@ bool Server::do_read(Client &c)
     // }
     // return (c._state == RD_DONE);
 }
-void    Server::handle_cgi_read_error(Client& c, int pipe_fd)
+void Server::handle_cgi_read_error(Client &c, int pipe_fd)
 {
     _epoller.del_event(pipe_fd);
     _manager.del_cgi_fd(pipe_fd);
 
-    kill(c._cgi.get_pid(), SIGKILL);
-    waitpid(c._cgi.get_pid(), NULL, 0);
-    c._cgi.reset();
+    kill(c._cgi->get_pid(), SIGKILL);
+    waitpid(c._cgi->get_pid(), NULL, 0);
+    c._cgi->reset();
 
-    HTTPResponse    err = buildErrorResponse(500);
+    HTTPResponse err = buildErrorResponse(500);
     c.write_buffer = ResponseBuilder::build(err);
     c.write_pos = 0;
     c._state = WRITING;
@@ -155,15 +155,16 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
     {
         ssize_t n = read(pipe_fd, buf, sizeof(buf));
         if (n > 0)
-            c._cgi.append_output(buf, n);
+            c._cgi->append_output(buf, n);
         else if (n == 0) // cgi finish
         {
             _epoller.del_event(pipe_fd);
             _manager.del_cgi_fd(pipe_fd);
-            waitpid(c._cgi.get_pid(), NULL, WNOHANG);
+            waitpid(c._cgi->get_pid(), NULL, WNOHANG);
 
             // client prepare la reponse
-            c._cgi.reset();
+            
+            c._cgi->reset();
             c.is_cgi = false;
 
             c._state = WRITING;
@@ -180,41 +181,41 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
     }
 }
 
-void    Server::handle_pipe_error(int fd)
+void Server::handle_pipe_error(int fd)
 {
-    Client* c = _manager.get_client_by_cgi_fd(fd);
+    Client *c = _manager.get_client_by_cgi_fd(fd);
 
     if (!c)
-        return ;
+        return;
     _epoller.del_event(fd);
     _manager.del_cgi_fd(fd);
 
-    if (c->_cgi.get_pid() > 0)
+    if (c->_cgi->get_pid() > 0)
     {
-        kill(c->_cgi.get_pid(), SIGKILL);
-        waitpid(c->_cgi.get_pid(), NULL, WNOHANG);
+        kill(c->_cgi->get_pid(), SIGKILL);
+        waitpid(c->_cgi->get_pid(), NULL, WNOHANG);
     }
-    c->_cgi.reset();
-    HTTPResponse    err = buildErrorResponse(500);
+    c->_cgi->reset();
+    HTTPResponse err = buildErrorResponse(500);
     c->write_buffer = ResponseBuilder::build(err);
     c->write_pos = 0;
     c->_state = WRITING;
     c->is_keep_alive = false;
 
-    _epoller.modif_event(c->client_fd, EPOLLOUT |EPOLLET);
+    _epoller.modif_event(c->client_fd, EPOLLOUT | EPOLLET);
 }
 
-void    Server::handle_socket_error(int fd)
+void Server::handle_socket_error(int fd)
 {
-    Client* c = _manager.get_client(fd);
+    Client *c = _manager.get_client(fd);
 
     if (!c)
-        return ;
-    if (c->is_cgi && c->_cgi.get_pid() > 0)
+        return;
+    if (c->is_cgi && c->_cgi->get_pid() > 0)
     {
-        kill(c->_cgi.get_pid(), SIGKILL);
-        waitpid(c->_cgi.get_pid(), NULL, 0);
-        int cgi_fd = c->_cgi.get_read_fd();
+        kill(c->_cgi->get_pid(), SIGKILL);
+        waitpid(c->_cgi->get_pid(), NULL, 0);
+        int cgi_fd = c->_cgi->get_read_fd();
         if (cgi_fd >= 0)
         {
             _epoller.del_event(cgi_fd);
@@ -226,13 +227,14 @@ void    Server::handle_socket_error(int fd)
     close(fd);
 }
 
-void    Server::handle_error_event(int fd)
+void Server::handle_error_event(int fd)
 {
     if (_manager.is_cgi_pipe(fd))
         handle_pipe_error(fd);
     else
         handle_socket_error(fd);
 }
+
 
 /**
  * run 中epoller的event的fd进行检查
@@ -258,11 +260,11 @@ void Server::run()
                 handle_connection();
                 continue;
             }
-            if (events & (EPOLLERR | EPOLLHUP| EPOLLRDHUP))
-            {
-                handle_error_event(fd);
-                continue;
-            }
+            //if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
+            //{
+            //    handle_error_event(fd);
+            //    continue;
+            //}
             if (_manager.is_cgi_pipe(fd))
             {
                 Client *c = _manager.get_client_by_cgi_fd(fd);
@@ -274,9 +276,31 @@ void Server::run()
             if (!c)
                 continue;
             if (events & EPOLLIN)
-                do_read(*c);
+            {
+                if (do_read(*c))
+                {
+                    c->_state = PROCESS;
+                    process_request(*c);
+                    _epoller.modif_event(fd, EPOLLOUT | EPOLLET);
+                }
+            }
             if (events & EPOLLOUT)
-                do_write(*c);
+            {
+                if (do_write(*c))
+                {
+                    if (c->is_keep_alive)
+                    {
+                        c->reset();
+                        _epoller.modif_event(fd, EPOLLIN | EPOLLET);
+                    }
+                    else
+                    {
+                        _manager.remove_client(fd);
+                        _epoller.del_event(fd);
+                        close(fd);
+                    }
+                }
+            }
         }
     }
 }

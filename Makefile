@@ -4,7 +4,7 @@ CFLAG = -Wall -Wextra -Werror -std=c++98
 
 INCLUDES = -I./includes -I.
 
-SRCS =	main.cpp  \
+SRCS =	Event/cpp/test_cgi_simple.cpp  \
 		HTTP/cpp/HTTPRequest.cpp \
 		HTTP/cpp/HTTPRequestParser.cpp \
 		HTTP/cpp/HTTPResponse.cpp \
@@ -15,7 +15,6 @@ SRCS =	main.cpp  \
 		Event/cpp/EpollManager.cpp\
 		Event/cpp/Client.cpp\
 		CGI/cpp/CGIProcess.cpp
-
 	
 
 OBJS = $(SRCS:.cpp=.o)

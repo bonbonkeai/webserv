@@ -45,6 +45,8 @@ public:
         // bool    chunked;
 
         int     error_code;
+        bool    is_cgi_request() const;
+
 };
 
 #endif

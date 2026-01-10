@@ -32,15 +32,15 @@ CGI_ENV CGI_Process::get_env_from_request(HTTPRequest &req)
 
     env.env_str.push_back("QUERY_STRING=" + req.query);
 
-    env.env_str.push_back("SCRIPT_NAME=" +);
-    env.env_str.push_back("SERVER_NAME=" +);
-    env.env_str.push_back("SERVER_PORT=" +);
-    env.env_str.push_back("SERVER_SOFTWARE" +);
-    env.env_str.push_back("REMOTE_ADDR=" +);
+    env.env_str.push_back("SCRIPT_NAME=" + req.path);
+    env.env_str.push_back("SERVER_NAME=localhost");
+    env.env_str.push_back("SERVER_PORT=8080");
+    env.env_str.push_back("SERVER_SOFTWARE=webserv/1.0");
+    env.env_str.push_back("REMOTE_ADDR=127.0.0.1");
 
     if (req.method == "POST")
     {
-        env.env_str.push_back("CONTENT_LENGTH=" + req.contentLength);
+        env.env_str.push_back("CONTENT_LENGTH=" + toString(req.contentLength));
         std::map<std::string, std::string>::const_iterator it = req.headers.find("content-type");
         if (it != req.headers.end())
             env.env_str.push_back("CONTENT_TYPE=" + req.headers["content-type"]);

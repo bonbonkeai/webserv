@@ -48,7 +48,7 @@ struct Client
     bool is_keep_alive;
 
     // cgi
-    CGI_Process  _cgi;
+    CGI_Process*  _cgi;
     bool    is_cgi;
 
     Client(int fd = -1) : client_fd(fd),
@@ -57,7 +57,9 @@ struct Client
                           parser(),
                           write_buffer(),
                           write_pos(0),
-                          is_keep_alive(false)
+                          is_keep_alive(false),
+                          _cgi(NULL),
+                          is_cgi(false)
     {
         read_buffer.reserve(4096);
     }
@@ -69,6 +71,8 @@ struct Client
         write_pos = 0;
         is_keep_alive = false;
         parser.reset();
+        is_cgi = false;
+
     }
     int get_fd()
     {

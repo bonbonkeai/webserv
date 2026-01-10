@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <string>
 
 struct Client;
 struct CGI_ENV
@@ -58,6 +59,22 @@ public:
     int get_read_fd() const
     {
         return _read_fd;
+    }
+    void    set_pid(pid_t pid)
+    {
+        _pid = pid;
+    }
+    void    set_read_fd(pid_t read_pid)
+    {
+        _read_fd = read_pid;
+    }
+    void    set_write_fd(pid_t pid)
+    {
+        _write_fd = pid;
+    }
+    std::string get_output()
+    {
+        return _output_buffer;
     }
 };
 

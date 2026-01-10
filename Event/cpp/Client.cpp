@@ -55,7 +55,7 @@ void    ClientManager::del_cgi_fd(int pipe_fd)
     if (it != _cgi_manager.end())
     {
         close(pipe_fd);
-        it->second->_cgi.reset();
+        it->second->_cgi->reset();
         _cgi_manager.erase(it);
     }
 }
