@@ -13,7 +13,11 @@ HTTPRequest::HTTPRequest() : method(""),
 			bad_request(false),
 			keep_alive(false),
 			has_content_length(false),
-			error_code(200)
+			error_code(200),
+            has_transfer_encoding(false),
+            chunked(false),
+            max_body_size(1024 * 1024 * 10) // 先临时 10MB
+
 {
 }
 
@@ -31,7 +35,10 @@ HTTPRequest::HTTPRequest(const HTTPRequest& copy)
       bad_request(copy.bad_request),
       keep_alive(copy.keep_alive),
 	  has_content_length(copy.has_content_length),
-	  error_code(copy.error_code)
+	  error_code(copy.error_code),
+      has_transfer_encoding(copy.has_transfer_encoding),
+      chunked(copy.chunked),
+      max_body_size(copy.max_body_size)
 {
 }
 
@@ -53,6 +60,9 @@ HTTPRequest& HTTPRequest::operator=(const HTTPRequest& copy)
         keep_alive = copy.keep_alive;
 		has_content_length = copy.has_content_length;
 		error_code = copy.error_code;
+        has_transfer_encoding = copy.has_transfer_encoding;
+        chunked = copy.chunked;
+        max_body_size = copy.max_body_size;
     }
     return (*this);
 }

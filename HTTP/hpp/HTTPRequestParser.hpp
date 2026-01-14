@@ -75,8 +75,16 @@ private:
 		bool	parseHeaders();
 		bool	parseBody();
 		bool	isValidHeaderName(const std::string& key);
-		bool	parseContentLengthStrict(const std::string& v, std::size_t& out, std::size_t max_body);
+		// bool	parseContentLengthStrict(const std::string& v, std::size_t& out, std::size_t max_body);
+		int		parseContentLengthStrict(const std::string& v, std::size_t& out, std::size_t max_body);
 		bool	fail(int code);
+
+		bool parseChunkedBody();
+		bool parseFixedBody();
+		// chunked decoding state
+		bool        _chunk_waiting_size;   // true: 等 size 行；false: 等 data + CRLF
+		std::size_t _chunk_expected_size;  // 当前 chunk 的大小
+
 };
 
 #endif

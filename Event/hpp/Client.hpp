@@ -19,6 +19,7 @@ HTTPRequestParser 实例
 keepAlive 状态
 lastActive 时间戳
 与 CGI 交互时的 cgiFd*/
+class   CGI_Process;
 
 enum Clientstate
 {
@@ -44,16 +45,22 @@ struct Client
 
     std::string write_buffer;
     size_t write_pos;
-    bool is_keep_alive;    
+    bool is_keep_alive;
+    
+    // cgi
+    CGI_Process*  _cgi;
+    bool    is_cgi;
 
-   Client(int fd = -1)
+    Client(int fd = -1)
     : client_fd(fd),
       _state(READING),
       read_buffer(),
       parser(),
       write_buffer(),
       write_pos(0),
-      is_keep_alive(false)
+      is_keep_alive(false),
+      _cgi(NULL),
+      is_cgi(false)
 	{
 		read_buffer.reserve(4096);
 	}
@@ -65,6 +72,7 @@ struct Client
 		write_pos = 0;
 		is_keep_alive = false;
 		parser.reset();
+        is_cgi = false;
 	}
     int get_fd()
     {
@@ -79,13 +87,19 @@ public:
     ~ClientManager();
 
     void add_client(int fd);
-    Client  &get_client(int fd);
+    Client *get_client(int fd);
     void remove_client(int fd);
 
-private:
-    std::map<int, Client> _clients;
-};
+    //gestion cgi client
+    Client* get_client_by_cgi_fd(int pipe_fd);
+    bool    is_cgi_pipe(int pipe_fd);
+    void    del_cgi_fd(int pipe_fd);
+    void    bind_cgi_fd(int pipe_fd, int client_fd);
 
+private:
+    std::map<int, Client *> _clients;     // socket_fd -> client*
+    std::map<int, Client *> _cgi_manager; // pipe_fd -> client*
+};
 #endif
 
 

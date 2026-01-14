@@ -1,36 +1,49 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
-#include "Event/hpp/PollManager.hpp"
+#include "Event/hpp/EpollManager.hpp"
 #include "Event/hpp/Client.hpp"
 #include "HTTP/hpp/ErrorResponse.hpp"
+#include "HTTP/hpp/ResponseBuilder.hpp"
 #include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <exception>
 #include <fcntl.h>
 #include <unistd.h>
-#include <cerrno> 
+#include <cerrno>
 
-class   Server
+class Epoller;
+class ResponseBuilder;
+class ClientManager;
+class Server
 {
-    public:
-        Server();
+public:
+        Server(int port);
         ~Server();
-        bool    init_sockets();
-        void    run();
-        void    set_non_block_fd(int fd);
-        bool    handle_connection();
+        bool init_sockets();
+        void run();
+        void set_non_block_fd(int fd);
+        bool handle_connection();
 
-        bool    do_read(Client& c);
-        bool    do_write(Client& c);
+        void handle_pipe_error(int fd);
+        void handle_socket_error(int fd);
+        void handle_error_event(int fd);
 
-    private:
-        //class de tous les configuration de server
+        void handle_cgi_read(Client &c, int pipe_fd);
+        void handle_cgi_read_error(Client &c, int pipe_fd);
+
+        bool do_read(Client &c);
+        bool do_write(Client &c);
+
+        void    process_request(Client& c);
+
+private:
+    // class de tous les configuration de server
         int port_nbr;
         int socketfd;
         Epoller _epoller;
-        ClientManager   _manager;
+        ClientManager _manager;
 };
 
 /*初始化 listen sockets (根据 ServerConfig)
@@ -44,7 +57,5 @@ while (running):
     if client fd readable → recv
     if client fd writable → send
     if CGI pipe readable → read CGI output*/
-
-
 
 #endif

@@ -34,5 +34,21 @@ void rtrimSpaces(std::string& s)
         s.erase(s.size() - 1, 1);
 }
 
+bool isTChar(unsigned char c)
+{
+    if (std::isalnum(c))
+        return true;
+    switch (c)
+    {
+        case '!': case '#': case '$': case '%': case '&':
+        case '\'': case '*': case '+': case '-': case '.':
+        case '^': case '_': case '`': case '|': case '~':
+            return (true);
+        default:
+            return (false);
+    }
+}
+
+
 
 

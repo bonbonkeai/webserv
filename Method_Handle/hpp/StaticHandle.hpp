@@ -1,6 +1,5 @@
-#endif
 
-打开文件
+/*打开文件
 读入内容
 根据扩展名确定 MIME 类型：
 [当浏览器访问一个静态文件->ex: GET /images/cat.png
@@ -12,4 +11,19 @@ Donc:
 根据扩展名（.html / .css / .png / .jpg / .js / .json / .mp4）
 查表决定MIME类型（text/html, image/png, ...）。]
 
-填充 HTTPResponse
+填充 HTTPResponse*/
+
+#ifndef STATICHANDLE_HPP
+#define STATICHANDLE_HPP
+
+#include <string>
+#include "HTTP/hpp/HTTPRequest.hpp"
+#include "HTTP/hpp/HTTPResponse.hpp"
+
+class StaticHandle
+{
+public:
+        static HTTPResponse serveFile(const HTTPRequest& req, const std::string& fullPath);
+};
+
+#endif

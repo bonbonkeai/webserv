@@ -10,13 +10,28 @@ SRCS =	test_http_parser.cpp  \
 		HTTP/cpp/HTTPResponse.cpp \
 		HTTP/cpp/ResponseBuilder.cpp \
 		HTTP/cpp/ErrorResponse.cpp \
-		HTTP/cpp/HTTPUtils.cpp 
+		HTTP/cpp/HTTPUtils.cpp \
+		HTTP/cpp/RequestFactory.cpp \
+		Method_Handle/cpp/DeleteRequest.cpp \
+		Method_Handle/cpp/DirectoryHandle.cpp \
+		Method_Handle/cpp/ErrorRequest.cpp \
+		Method_Handle/cpp/FileUtils.cpp \
+		Method_Handle/cpp/GetRequest.cpp \
+		Method_Handle/cpp/PostRequest.cpp \
+		Method_Handle/cpp/RedirectHandle.cpp \
+		Method_Handle/cpp/StaticHandle.cpp \
+		Method_Handle/cpp/UploadHandle.cpp \
+# 		Event/cpp/Client.cpp \
+# 		Event/cpp/EpollManager.cpp \
+# 		Event/cpp/Server.cpp \
+# 		CGI/cpp/CGIProcess.cpp \
+		test_methods.cpp  \
 
 	
 
 OBJS = $(SRCS:.cpp=.o)
 
-NAME = test_http
+NAME = test_methods
 # NAME = webserv
 
 all: $(NAME)

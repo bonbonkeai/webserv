@@ -1,24 +1,17 @@
-#ifndef RESQUESTFACTORY_HPP
-#define RESQUESTFACTORY_HPP
+
+#ifndef REQUESTFACTORY_HPP
+#define REQUESTFACTORY_HPP
 
 #include "HTTP/hpp/HTTPRequest.hpp"
 #include "Method_Handle/hpp/IRequest.hpp"
-#include "Method_Handle/hpp/GetRequest.hpp"
-#include "Method_Handle/hpp/ErrorRequest.hpp"
-#include "Method_Handle/hpp/PostRequest.hpp"
-#include "Method_Handle/hpp/DeleteRequest.hpp"
 
 class RequestFactory
 {
 public:
-		RequestFactory();
-		RequestFactory(const RequestFactory& copy);
-		RequestFactory& operator=(const RequestFactory& copy);
-		~RequestFactory();
-
-		static IRequest* create(const HTTPRequest& req);
+    static IRequest* create(const HTTPRequest& req);
 };
 
+#endif
 
 /*根据 HTTPRequest.method 返回正确的类型：
 GET → GetRequest
@@ -28,7 +21,5 @@ DELETE → DeleteRequest
 
 用于把协议层(C)连接到业务层(Handle)。*/
 
-
-#endif
 
 
