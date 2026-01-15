@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <sstream>
 
 /*与Request对应的响应数据结构
 statusCode
@@ -25,6 +26,8 @@ public:
 		std::string body;
 
 		void clear();
+		HTTPResponse buildResponseFromCGIOutput(const std::string& out, bool keep_alive);
+
 };
 
 

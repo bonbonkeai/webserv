@@ -40,13 +40,13 @@ private:
     int _read_fd;
     int _write_fd;
     std::string _output_buffer;
-    time_t  start_time;
+
 public:
     CGI_Process();
     ~CGI_Process();
 
     std::string format_header_key(const std::string &key);
-    CGI_ENV get_env_from_request(const HTTPRequest &req); // 可能还需要别的内容
+    CGI_ENV get_env_from_request(HTTPRequest &req); // 可能还需要别的内容
     bool execute(const std::string &script_path, HTTPRequest &req);
     void reset();
     void append_output(const char *buf, size_t n);
@@ -75,18 +75,6 @@ public:
     std::string get_output()
     {
         return _output_buffer;
-    }
-    void    set_start_time(time_t   time)
-    {
-        start_time = time;
-    }
-    time_t  get_start_time()
-    {
-        return start_time;
-    }
-    int get_write_fd()
-    {
-        return _write_fd;
     }
 };
 

@@ -34,17 +34,21 @@ void rtrimSpaces(std::string& s)
         s.erase(s.size() - 1, 1);
 }
 
-
-std::string extrat_session_id(const std::string& cookie)
+bool isTChar(unsigned char c)
 {
-    std::string key = "SID=";
-
-    size_t  pos = cookie.find(key);
-    if (pos == std::string::npos)
-        return NULL;
-    pos += key.size();
-    size_t  end = cookie.find(';', pos);
-    if (end == std::string::npos)
-        end = cookie.size();
-    return cookie.substr(pos, end-pos);
+    if (std::isalnum(c))
+        return true;
+    switch (c)
+    {
+        case '!': case '#': case '$': case '%': case '&':
+        case '\'': case '*': case '+': case '-': case '.':
+        case '^': case '_': case '`': case '|': case '~':
+            return (true);
+        default:
+            return (false);
+    }
 }
+
+
+
+

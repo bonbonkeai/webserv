@@ -1,9 +1,7 @@
 #include "Event/hpp/Server.hpp"
 #include <cstring>
-#include <sys/wait.h>
 
 #define Timeout 50 // 50-100
-#define CGI_TIMEOUT 5.0 //if not found in config 
 
 // 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
 Server::Server(int port) : port_nbr(port), socketfd(-1)
@@ -62,21 +60,29 @@ bool Server::handle_connection()
 }
 
 // 暂时还不做业务 handle，所以 process_request 的最小实现就返回一个固定 body，同时把 keep-alive 从 request 带过来。
-// static HTTPResponse process_request(const HTTPRequest &req)
-//{
-//    if (req.bad_request)
-//        return buildErrorResponse(400);
-//
-//    HTTPResponse resp;
-//    resp.statusCode = 200;
-//    resp.statusText = "OK";
-//    resp.body = "OK\n";
-//    resp.headers["content-type"] = "text/plain; charset=utf-8";
-//    resp.headers["content-length"] = toString(resp.body.size());
-//    resp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
-//    return (resp);
-//}
-//
+//  static HTTPResponse process_request(const HTTPRequest& req)
+//  {
+//      if (req.bad_request)
+//          return buildErrorResponse(400);
+
+//     HTTPResponse resp;
+//     resp.statusCode = 200;
+//     resp.statusText = "OK";
+//     resp.body = "OK\n";
+//     resp.headers["content-type"] = "text/plain; charset=utf-8";
+//     resp.headers["content-length"] = toString(resp.body.size());
+//     resp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+//     return (resp);
+// }
+
+static HTTPResponse process_request(const HTTPRequest &req)
+{
+    IRequest *h = RequestFactory::create(req);
+    HTTPResponse resp = h->handle();
+    delete h;
+    return (resp);
+}
+
 bool Server::do_read(Client &c)
 {
     char tmp[4096];
@@ -132,6 +138,7 @@ bool Server::do_read(Client &c)
     // }
     // return (c._state == RD_DONE);
 }
+
 void Server::handle_cgi_read_error(Client &c, int pipe_fd)
 {
     _epoller.del_event(pipe_fd);
@@ -164,13 +171,13 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
             waitpid(c._cgi->get_pid(), NULL, WNOHANG);
 
             // client prepare la reponse
-            close(pipe_fd);
-            if (c._cgi->get_write_fd() >= 0)
-                close(c._cgi->get_write_fd());
-            int status;
-            waitpid(c._cgi->get_pid(), &status, WNOHANG);
+            HTTPResponse resp;
+            resp = resp.buildResponseFromCGIOutput(c._cgi->get_output(),
+                                                   c.parser.getRequest().keep_alive);
+            c.write_buffer = ResponseBuilder::build(resp);
+            c.write_pos = 0;
 
-            c._cgi->reset();
+            // c._cgi->reset();
             c.is_cgi = false;
 
             c._state = WRITING;
@@ -241,48 +248,6 @@ void Server::handle_error_event(int fd)
         handle_socket_error(fd);
 }
 
-void Server::check_cgi_timeout()
-{
-    time_t now = std::time(0);
-    std::map<int, Client *> &clients = _manager.get_all_client();
-    for (std::map<int, Client *>::iterator it = clients.begin(); it != clients.end();++it)
-    {
-        Client *c = it->second;
-
-        if (c && c->is_cgi && c->_cgi->get_pid() > 0)
-        {
-            double  diff = std::difftime(now, c->_cgi->get_start_time());
-            if ( diff >= CGI_TIMEOUT) // 超过cgi 的反映时长设置
-            {
-                int pipe_fd = c->_cgi->get_read_fd();
-                if (pipe_fd >= 0)
-                {
-                    _epoller.del_event(pipe_fd);
-                    _manager.del_cgi_fd(pipe_fd);
-                    close(pipe_fd);
-                }
-                if (c->_cgi->get_write_fd() >= 0)
-                    close(c->_cgi->get_write_fd());
-
-                kill(c->_cgi->get_pid(), SIGKILL);
-                waitpid(c->_cgi->get_pid(), NULL, WNOHANG);
-
-                // response error
-                HTTPResponse    err = buildErrorResponse(504);
-                c->write_buffer = ResponseBuilder::build(err);
-                c->write_pos = 0;
-                c->_state = WRITING;
-                c->is_keep_alive = false;
-
-                c->is_cgi = false;
-                c->_cgi->reset();
-                _epoller.modif_event(c->client_fd, EPOLLOUT|EPOLLET);
-                
-            }
-        }
-    }
-}
-
 /**
  * run 中epoller的event的fd进行检查
  *  1. 此fd是socketfd ->handle connection
@@ -298,7 +263,6 @@ void Server::run()
     while (true)
     {
         int nfds = _epoller.wait(Timeout);
-        check_cgi_timeout();
         for (int i = 0; i < nfds; i++)
         {
             int fd = _epoller.get_event_fd(i);
@@ -334,7 +298,6 @@ void Server::run()
             }
             if (events & EPOLLOUT)
             {
-                std::cout << "TIMEOUT cgi" << std::endl; // test to see if the timeout cgi arrive in epollout
                 if (do_write(*c))
                 {
                     if (c->is_keep_alive)
@@ -355,7 +318,7 @@ void Server::run()
 }
 
 // void Server::run()
-//{
+// {
 //     set_non_block_fd(socketfd);
 //     _epoller.add_event(socketfd, EPOLLIN | EPOLLET);
 //     while (true)
@@ -450,7 +413,7 @@ void Server::run()
 //         }
 //     }
 // }
-//
+
 bool Server::do_write(Client &c)
 {
     while (c.write_pos < c.write_buffer.size())

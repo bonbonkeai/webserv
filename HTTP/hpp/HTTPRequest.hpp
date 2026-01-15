@@ -41,12 +41,12 @@ public:
         bool    keep_alive;
 
         bool    has_content_length;
-        // bool    has_transfer_encoding;
-        // bool    chunked;
 
         int     error_code;
-        bool    is_cgi_request() const;
 
+        bool    has_transfer_encoding;
+        bool    chunked;
+        std::size_t max_body_size; //先写死，后面接入config
 };
 
 #endif

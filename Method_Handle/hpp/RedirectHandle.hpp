@@ -1,6 +1,5 @@
-#endif
 
-处理：
+/*处理：
 return 301 URL
 return 302 URL
 设置：
@@ -30,4 +29,19 @@ return->这里意味着：
 不处理文件
 不进入 CGI
 不进入静态文件流程
-直接返回->重定向响应
+直接返回->重定向响应*/
+
+#ifndef REDIRECTHANDLE_HPP
+#define REDIRECTHANDLE_HPP
+
+#include <string>
+#include "HTTP/hpp/HTTPResponse.hpp"
+#include "HTTP/hpp/HTTPRequest.hpp"
+
+class RedirectHandle
+{
+public:
+        static HTTPResponse buildRedirect(const HTTPRequest& req, int code, const std::string& location);
+};
+
+#endif

@@ -2,20 +2,18 @@
 #include "Event/hpp/Client.hpp"
 #include "Event/hpp/Server.hpp"
 #include "HTTP/hpp/HTTPRequest.hpp"
-#include "HTTP/hpp/HTTPUtils.hpp"
-#include "HTTP/hpp/Session.hpp"
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <stdio.h>
-#include <ctime>
 
 class Server;
 struct Client;
 class HTTPRequest;
 
-void spawn_cgi(Client &c, const HTTPRequest &req)
+void spawn_cgi(Client &c, const std::string &script_path)
 {
     int pipe_out[2];
     int pipe_in[2];
@@ -36,11 +34,10 @@ void spawn_cgi(Client &c, const HTTPRequest &req)
         close(pipe_in[0]);
 
         // env minimal
-        CGI_ENV env = c._cgi->get_env_from_request(req);
-        std::string path_script = "./www" + req.path;
-        char *argv[] = {const_cast<char *>(path_script.c_str()), NULL};
+        char *env[] = {(char *)"REQUEST_METHOD=GET", (char *)NULL};
+        char *argv[] = {(char *)script_path.c_str(), NULL};
 
-        execve(argv[0], argv, &env.envp[0]);
+        execve(script_path.c_str(), argv, env);
         perror("execve");
         _exit(1);
     }
@@ -49,27 +46,22 @@ void spawn_cgi(Client &c, const HTTPRequest &req)
         // parent
         close(pipe_out[1]);
         close(pipe_in[0]);
-        // for the test only
-        //int status;
-        //waitpid(pid, &status, 0); // 阻塞等 CGI 完
-        //char buf[4096];
-        //ssize_t n = read(pipe_out[0], buf, sizeof(buf));
-        //std::string output(buf, n);
-//
-        //c.write_buffer = "HTTP/1.1 200 OK\r\nContent-Length: " + toString(output.size()) + "\r\n\r\n" + output;
-        //c.write_pos = 0;
-        //c._state = WRITING;
+        //for the test only
+        int status;
+        waitpid(pid, &status, 0); // 阻塞等 CGI 完
+        char buf[4096];
+        ssize_t n = read(pipe_out[0], buf, sizeof(buf));
+        std::string output(buf, n);
+
+        c.write_buffer = "HTTP/1.1 200 OK\r\nContent-Length: " + toString(output.size()) + "\r\n\r\n" + output;
+        c.write_pos = 0;
+        c._state = WRITING;
         //
-        //test cgi timeout setting
-        fcntl(pipe_out[0], F_SETFL, O_NONBLOCK);
-        fcntl(pipe_in[1], F_SETFL, O_NONBLOCK);
-        if (c._cgi == NULL)
-            c._cgi = new CGI_Process();
+        c._cgi = new CGI_Process();
         c._cgi->set_pid(pid);
         c._cgi->set_read_fd(pipe_out[0]);
         c._cgi->set_write_fd(pipe_in[1]);
         c.is_cgi = true;
-        c._cgi->set_start_time(std::time(0));
     }
 }
 bool HTTPRequest::is_cgi_request() const
@@ -93,22 +85,12 @@ void Server::process_request(Client &c)
 {
     const HTTPRequest &req = c.parser.getRequest();
 
-    std::string cookie_id;
-    std::map<std::string, std::string>::const_iterator it = req.headers.find("cookie");
-    if (it != req.headers.end())
-        cookie_id = it->second;
-
-    bool new_session = false;
-    Session *session = http_cookie.get_session(cookie_id, new_session);
-    if (new_session)
-        cookie_id = session->_id;
-    std::cout << "expiration: " << session->last_acces << std::endl;
     if (req.is_cgi_request())
     {
         // CGI 处理
-        spawn_cgi(c, req);  // 最小测试用
-        c._state = WRITING; // 输出通过 pipe 非阻塞写
-        //_epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+        spawn_cgi(c, "./www" + req.path); // 最小测试用
+        c._state = WRITING;               // 输出通过 pipe 非阻塞写
+        _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
         _epoller.add_event(c._cgi->get_read_fd(), EPOLLIN | EPOLLET);
         _manager.bind_cgi_fd(c._cgi->get_read_fd(), c.client_fd);
     }
@@ -124,7 +106,6 @@ void Server::process_request(Client &c)
         resp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
 
         c.write_buffer = ResponseBuilder::build(resp);
-        std::cout << "test for response: " << c.write_buffer << std::endl;
         c.write_pos = 0;
         c._state = WRITING;
         _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
@@ -152,11 +133,9 @@ int main(int ac, char **av)
         std::cerr << "Invalid port\n";
         return 1;
     }
-
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     signal(SIGPIPE, SIG_IGN);
-
     try
     {
         Server server(port);
