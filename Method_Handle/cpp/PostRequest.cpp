@@ -78,12 +78,11 @@ HTTPResponse PostRequest::handle()
 {
     const bool hasCT = _req.headers.count("content-type");
     const std::string ct = hasCT ? _req.headers.find("content-type")->second : "";
-    const bool isMultipart =
-        hasCT && ct.find("multipart/form-data") != std::string::npos;
-    // ---------- 情况 1：POST /upload ----------
+    const bool isMultipart = hasCT && ct.find("multipart/form-data") != std::string::npos;
+    // ---------- case 1：POST /upload ----------
     if (isUploadEndpoint(_req.path))
     {
-        // 1.1 只允许 multipart
+        // 只允许 multipart
         if (!isMultipart)
         {
             HTTPResponse r = buildErrorResponse(415); // Unsupported Media Type
@@ -96,14 +95,14 @@ HTTPResponse PostRequest::handle()
             return (resp);
         return (resp); // 错误已填充
     }
-    // ---------- 情况 2：multipart 但不是 /upload ----------
+    // ---------- case 2：multipart 但不是 /upload ----------
     if (isMultipart)
     {
         HTTPResponse r = buildErrorResponse(403);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
-    // ---------- 情况 3：fallback raw upload (/upload/<filename>) ----------
+    // ---------- case 3：fallback raw upload (/upload/<filename>) ----------
     return handleRawUploadFallback();
 }
 

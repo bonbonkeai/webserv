@@ -230,7 +230,7 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     {
         outResp = buildErrorResponse(400);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
-        return false;
+        return (false);
     }
 
     // multipart 的边界串在 body 里表现为：

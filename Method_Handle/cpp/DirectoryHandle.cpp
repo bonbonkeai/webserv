@@ -44,7 +44,8 @@ bool DirectoryHandle::generateAutoIndexHtml(const std::string& urlPath, const st
     for (;;)
     {
         struct dirent* ent = readdir(d);
-        if (!ent) break;
+        if (!ent)
+            break;
 
         std::string name(ent->d_name);
         if (name == "." || name == "..") continue;
