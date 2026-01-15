@@ -3,6 +3,7 @@
 
 import os
 import sys
+import time
 
 print("Content-Type: text/html")
 print("")  # ⚠️ 必须有空行
@@ -23,5 +24,7 @@ if os.environ.get("REQUEST_METHOD") == "POST":
         body = sys.stdin.read(length)
         print("<h2>POST Data</h2>")
         print("<pre>{}</pre>".format(body))
+
+time.sleep(1)
 
 print("</body></html>")

@@ -5,6 +5,7 @@
 #include "Event/hpp/Client.hpp"
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include "HTTP/hpp/ResponseBuilder.hpp"
+#include "HTTP/hpp/Session.hpp"
 #include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -16,6 +17,8 @@
 class Epoller;
 class ResponseBuilder;
 class ClientManager;
+class Session_Manager;
+
 class Server
 {
 public:
@@ -37,13 +40,14 @@ public:
     bool do_write(Client &c);
 
     void    process_request(Client& c);
-
+    void    check_cgi_timeout();
 private:
     // class de tous les configuration de server
     int port_nbr;
     int socketfd;
     Epoller _epoller;
     ClientManager _manager;
+    Session_manager http_cookie;
 };
 
 /*初始化 listen sockets (根据 ServerConfig)

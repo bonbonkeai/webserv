@@ -22,7 +22,7 @@ std::string CGI_Process::format_header_key(const std::string &key)
     return resultat;
 }
 
-CGI_ENV CGI_Process::get_env_from_request(HTTPRequest &req)
+CGI_ENV CGI_Process::get_env_from_request(const HTTPRequest &req)
 {
     CGI_ENV env;
 
@@ -43,7 +43,7 @@ CGI_ENV CGI_Process::get_env_from_request(HTTPRequest &req)
         env.env_str.push_back("CONTENT_LENGTH=" + toString(req.contentLength));
         std::map<std::string, std::string>::const_iterator it = req.headers.find("content-type");
         if (it != req.headers.end())
-            env.env_str.push_back("CONTENT_TYPE=" + req.headers["content-type"]);
+            env.env_str.push_back("CONTENT_TYPE=" + it->second);
     }
 
     for (std::map<std::string, std::string>::const_iterator it = req.headers.begin(); it != req.headers.end(); it++)
@@ -124,6 +124,8 @@ bool CGI_Process::execute(const std::string &script_path, HTTPRequest &req)
     _write_fd = pipe_in[1];
     set_non_block_fd(_read_fd);
     set_non_block_fd(_write_fd);
+    //缺少epoller 把这个read fd 加入到event中
+    //缺少manager把readfd 加入到cgi manager中
     if (req.method == "POST" && req.has_body)
     //write the content in the body 
         write(pipe_in[1], req.body.c_str(), req.body.size());

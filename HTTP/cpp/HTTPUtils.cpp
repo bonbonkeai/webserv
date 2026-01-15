@@ -35,4 +35,16 @@ void rtrimSpaces(std::string& s)
 }
 
 
+std::string extrat_session_id(const std::string& cookie)
+{
+    std::string key = "SID=";
 
+    size_t  pos = cookie.find(key);
+    if (pos == std::string::npos)
+        return NULL;
+    pos += key.size();
+    size_t  end = cookie.find(';', pos);
+    if (end == std::string::npos)
+        end = cookie.size();
+    return cookie.substr(pos, end-pos);
+}

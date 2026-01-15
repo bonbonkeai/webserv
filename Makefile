@@ -14,7 +14,8 @@ SRCS =	Event/cpp/test_cgi_simple.cpp  \
 		Event/cpp/Server.cpp\
 		Event/cpp/EpollManager.cpp\
 		Event/cpp/Client.cpp\
-		CGI/cpp/CGIProcess.cpp
+		CGI/cpp/CGIProcess.cpp\
+		HTTP/cpp/Session.cpp
 	
 
 OBJS = $(SRCS:.cpp=.o)

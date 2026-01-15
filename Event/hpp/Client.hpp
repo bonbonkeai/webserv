@@ -95,6 +95,10 @@ public:
     bool    is_cgi_pipe(int pipe_fd);
     void    del_cgi_fd(int pipe_fd);
     void    bind_cgi_fd(int pipe_fd, int client_fd);
+    std::map<int, Client*> &get_all_client()
+    {
+        return _clients;
+    }
 
 private:
     std::map<int, Client *> _clients;     // socket_fd -> client*

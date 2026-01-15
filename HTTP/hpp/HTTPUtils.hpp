@@ -11,4 +11,5 @@ void ltrimSpaces(std::string& s);
 bool isTokenUpperAlpha(const std::string& s);
 void rtrimSpaces(std::string& s);
 
+std::string extrat_session_id(const std::string& cookie);
 #endif

@@ -24,7 +24,7 @@ Content-Length: 345
 
 HTTPParser 做的事：
 拆成：
-method = POST
+method = POSTf
 path = "/upload"
 query="folder=images"
 version="HTTP/1.1"

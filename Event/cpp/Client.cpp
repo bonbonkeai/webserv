@@ -62,10 +62,9 @@ void    ClientManager::del_cgi_fd(int pipe_fd)
 
 void    ClientManager::bind_cgi_fd(int pipe_fd, int client_fd)
 {
-    Client* c = _clients.at(client_fd);
-    if (c)
-    {
-        _cgi_manager[pipe_fd] = c;
-        c->is_cgi = true;
-    }
+    Client* c = get_client(client_fd);
+
+    if (!c)
+        return;
+    _cgi_manager[pipe_fd] = c;
 }
