@@ -41,7 +41,9 @@ public:
     bool do_read(Client &c);
     bool do_write(Client &c);
 
-    void process_request(Client &c);
+    HTTPResponse process_request(const HTTPRequest &req);
+
+    // void process_request(Client &c);
 
 private:
     // class de tous les configuration de server

@@ -24,9 +24,10 @@ SRCS =	HTTP/cpp/HTTPRequest.cpp \
  		Event/cpp/EpollManager.cpp \
  		Event/cpp/Server.cpp \
  		CGI/cpp/CGIProcess.cpp \
-		test_methods.cpp  
-	#	test_http_parser.cpp  
+		main.cpp
 
+# 		test_http_parser.cpp 
+# 		test_methods.cpp  
 	
 
 OBJS = $(SRCS:.cpp=.o)

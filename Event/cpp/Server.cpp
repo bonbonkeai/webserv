@@ -76,7 +76,15 @@ bool Server::handle_connection()
 //     return (resp);
 // }
 
-static HTTPResponse process_request(const HTTPRequest &req)
+// static HTTPResponse process_request(const HTTPRequest &req)
+// {
+//     IRequest *h = RequestFactory::create(req);
+//     HTTPResponse resp = h->handle();
+//     delete h;
+//     return (resp);
+// }
+
+HTTPResponse Server::process_request(const HTTPRequest &req)
 {
     IRequest *h = RequestFactory::create(req);
     HTTPResponse resp = h->handle();
@@ -153,7 +161,8 @@ void Server::handle_cgi_read_error(Client &c, int pipe_fd)
     c.write_pos = 0;
     c._state = WRITING;
     c.is_keep_alive = false;
-    _epoller.modif_event(pipe_fd, EPOLLOUT | EPOLLET);
+    // _epoller.modif_event(pipe_fd, EPOLLOUT | EPOLLET);
+    _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
 }
 
 void Server::handle_cgi_read(Client &c, int pipe_fd)
@@ -256,6 +265,7 @@ void Server::handle_error_event(int fd)
  *  4. 什么也不是，error处理
  *  5. error处理当中，需要对fd的来源进行检查，如果是cgi那边的问题，需要kill结束进程
  */
+
 void Server::run()
 {
     set_non_block_fd(socketfd);
@@ -290,11 +300,24 @@ void Server::run()
                 continue;
             if (events & EPOLLIN)
             {
+                // if (do_read(*c))
+                // {
+                //     c->_state = PROCESS;
+                //     process_request(*c);
+                //     _epoller.modif_event(fd, EPOLLOUT | EPOLLET);
+                // }
                 if (do_read(*c))
                 {
-                    c->_state = PROCESS;
-                    process_request(*c);
-                    _epoller.modif_event(fd, EPOLLOUT | EPOLLET);
+                    if (c->_state == PROCESS)
+                    {
+                        HTTPRequest req = c->parser.getRequest();
+                        HTTPResponse resp = process_request(req);
+                        c->is_keep_alive = req.keep_alive;
+                        c->write_buffer = ResponseBuilder::build(resp);
+                        c->write_pos = 0;
+                    }
+                    c->_state = WRITING;
+                    _epoller.modif_event(fd, EPOLLOUT | EPOLLET);   
                 }
             }
             if (events & EPOLLOUT)
