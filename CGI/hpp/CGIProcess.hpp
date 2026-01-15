@@ -1,4 +1,3 @@
-#endif
 #ifndef CGIPROCESS_HPP
 #define CGIPROCESS_HPP
 

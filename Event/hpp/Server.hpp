@@ -5,6 +5,9 @@
 #include "Event/hpp/Client.hpp"
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include "HTTP/hpp/ResponseBuilder.hpp"
+#include "HTTP/hpp/HTTPResponse.hpp"
+#include "HTTP/hpp/RequestFactory.hpp"
+
 #include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -16,34 +19,36 @@
 class Epoller;
 class ResponseBuilder;
 class ClientManager;
+class HTTPResponse;
+
 class Server
 {
 public:
-        Server(int port);
-        ~Server();
-        bool init_sockets();
-        void run();
-        void set_non_block_fd(int fd);
-        bool handle_connection();
+    Server(int port);
+    ~Server();
+    bool init_sockets();
+    void run();
+    void set_non_block_fd(int fd);
+    bool handle_connection();
 
-        void handle_pipe_error(int fd);
-        void handle_socket_error(int fd);
-        void handle_error_event(int fd);
+    void handle_pipe_error(int fd);
+    void handle_socket_error(int fd);
+    void handle_error_event(int fd);
 
-        void handle_cgi_read(Client &c, int pipe_fd);
-        void handle_cgi_read_error(Client &c, int pipe_fd);
+    void handle_cgi_read(Client &c, int pipe_fd);
+    void handle_cgi_read_error(Client &c, int pipe_fd);
 
-        bool do_read(Client &c);
-        bool do_write(Client &c);
+    bool do_read(Client &c);
+    bool do_write(Client &c);
 
-        void    process_request(Client& c);
+    void process_request(Client &c);
 
 private:
     // class de tous les configuration de server
-        int port_nbr;
-        int socketfd;
-        Epoller _epoller;
-        ClientManager _manager;
+    int port_nbr;
+    int socketfd;
+    Epoller _epoller;
+    ClientManager _manager;
 };
 
 /*初始化 listen sockets (根据 ServerConfig)

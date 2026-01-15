@@ -1,12 +1,11 @@
 #include "Event/hpp/Server.hpp"
 #include <cstring>
-#include "Method_Handle/hpp/RequestFactory.hpp"
-
+#include <sys/wait.h>
 
 #define Timeout 50 // 50-100
 
-//这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
-Server::Server() : port_nbr(-1), socketfd(-1)
+// 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
+Server::Server(int port) : port_nbr(port), socketfd(-1)
 {
 }
 Server::~Server()
@@ -61,11 +60,11 @@ bool Server::handle_connection()
     return true;
 }
 
-//暂时还不做业务 handle，所以 process_request 的最小实现就返回一个固定 body，同时把 keep-alive 从 request 带过来。
-// static HTTPResponse process_request(const HTTPRequest& req)
-// {
-//     if (req.bad_request)
-//         return buildErrorResponse(400);
+// 暂时还不做业务 handle，所以 process_request 的最小实现就返回一个固定 body，同时把 keep-alive 从 request 带过来。
+//  static HTTPResponse process_request(const HTTPRequest& req)
+//  {
+//      if (req.bad_request)
+//          return buildErrorResponse(400);
 
 //     HTTPResponse resp;
 //     resp.statusCode = 200;
@@ -77,9 +76,9 @@ bool Server::handle_connection()
 //     return (resp);
 // }
 
-static HTTPResponse process_request(const HTTPRequest& req)
+static HTTPResponse process_request(const HTTPRequest &req)
 {
-    IRequest* h = RequestFactory::create(req);
+    IRequest *h = RequestFactory::create(req);
     HTTPResponse resp = h->handle();
     delete h;
     return (resp);
@@ -88,7 +87,7 @@ static HTTPResponse process_request(const HTTPRequest& req)
 bool Server::do_read(Client &c)
 {
     char tmp[4096];
-    bool is_reading = true;
+    // bool is_reading = true;
 
     while (true)
     {
@@ -100,8 +99,8 @@ bool Server::do_read(Client &c)
             {
                 c._state = ERROR;
                 // 生成错误响应//
-                HTTPResponse err = buildErrorResponse(400);//暂时先放400，后续可以根据具体的error_code来修改
-                //HTTPResponse err = buildErrorResponse(c.parser.getRequest().error_code);
+                HTTPResponse err = buildErrorResponse(400); // 暂时先放400，后续可以根据具体的error_code来修改
+                // HTTPResponse err = buildErrorResponse(c.parser.getRequest().error_code);
                 c.is_keep_alive = false;
                 c.write_buffer = ResponseBuilder::build(err);
                 c.write_pos = 0;
@@ -140,7 +139,6 @@ bool Server::do_read(Client &c)
     // }
     // return (c._state == RD_DONE);
 }
-
 void Server::handle_cgi_read_error(Client &c, int pipe_fd)
 {
     _epoller.del_event(pipe_fd);
@@ -173,8 +171,9 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
             waitpid(c._cgi->get_pid(), NULL, WNOHANG);
 
             // client prepare la reponse
-            HTTPResponse resp = buildResponseFromCGIOutput(c._cgi->get_output(),
-                                              c.parser.getRequest().keep_alive);
+            HTTPResponse resp;
+            resp = resp.buildResponseFromCGIOutput(c._cgi->get_output(),
+                                                   c.parser.getRequest().keep_alive);
             c.write_buffer = ResponseBuilder::build(resp);
             c.write_pos = 0;
 
@@ -273,11 +272,12 @@ void Server::run()
                 handle_connection();
                 continue;
             }
-            //if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
+            // if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
             //{
-            //    handle_error_event(fd);
-            //    continue;
-            //}
+            //     handle_error_event(fd);
+            //     continue;
+            // }
+
             if (_manager.is_cgi_pipe(fd))
             {
                 Client *c = _manager.get_client_by_cgi_fd(fd);
@@ -317,7 +317,6 @@ void Server::run()
         }
     }
 }
-
 
 // void Server::run()
 // {
@@ -421,14 +420,15 @@ bool Server::do_write(Client &c)
     while (c.write_pos < c.write_buffer.size())
     {
         ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
-        if (n > 0) c.write_pos += n;
+        if (n > 0)
+            c.write_pos += n;
         else
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 return (false);
             c._state = ERROR;
-            return (true); //让上层走 close
+            return (true); // 让上层走 close
         }
     }
-    return (true);//写完
+    return (true); // 写完
 }

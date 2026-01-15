@@ -1,3 +1,20 @@
+#ifndef CGIMANAGER_HPP
+#define CGIMANAGER_HPP
+
+#include "CGIProcess.hpp"
+#include <iostream>
+#include <map>
+
+class   CGIManager
+{
+    private:
+    
+    public:
+        CGIManager();
+        ~CGIManager();
+
+};
+
 #endif
 
 统一管理多个正在运行的 CGI

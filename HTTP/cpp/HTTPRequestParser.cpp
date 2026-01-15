@@ -213,9 +213,9 @@ bool	HTTPRequestParser::parseRequestLine()
     if (_req.uri.size() > MAX_URI_LENGTH)
         return (fail(414));
     if (_req.method != "GET" && _req.method != "POST" && _req.method != "DELETE")
-        return (fail(405));
+        {return (fail(405));}
 	if (_req.version != "HTTP/1.1")
-		return (fail(505));
+		{return (fail(505));}
 	_req.keep_alive = true;
 	splitUri();
     _chunk_waiting_size = true;
