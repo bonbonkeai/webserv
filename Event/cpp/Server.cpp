@@ -92,10 +92,94 @@ HTTPResponse Server::process_request(const HTTPRequest &req)
     return (resp);
 }
 
+// bool Server::do_read(Client &c)
+// {
+//     char tmp[4096];
+//     // bool is_reading = true;
+
+//     while (true)
+//     {
+//         ssize_t n = recv(c.get_fd(), tmp, sizeof(tmp), 0);
+//         if (n > 0)
+//         {
+//             bool ok = c.parser.dejaParse(std::string(tmp, n));
+//             if (!ok && c.parser.getRequest().bad_request)
+//             {
+//                 c._state = ERROR;
+//                 // 生成错误响应//
+//                 HTTPResponse err = buildErrorResponse(400); // 暂时先放400，后续可以根据具体的error_code来修改
+//                 // HTTPResponse err = buildErrorResponse(c.parser.getRequest().error_code);
+//                 c.is_keep_alive = false;
+//                 c.write_buffer = ResponseBuilder::build(err);
+//                 c.write_pos = 0;
+//                 return (true); // 让上层切到 WRITING
+//             }
+//         }
+//         else if (n == 0)
+//         {
+//             c._state = CLOSED;
+//             return (false);
+//         }
+//         else
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 break;
+//             c._state = ERROR;
+//             return (false);
+//         }
+//     }
+//     if (c.parser.getRequest().complet)
+//     {
+//         c._state = PROCESS;
+//         return (true);
+//     }
+//     return (false);
+//     // while (is_reading)
+//     // {
+//     //     if (c._state == RD_LINE)
+//     //         is_reading = read_request_line(c);
+//     //     else if (c._state == RD_HEADER)
+//     //         is_reading = read_request_header(c);
+//     //     else if (c._state == RD_BODY)
+//     //         is_reading = read_request_body(c);
+//     //     else
+//     //         is_reading = false;
+//     // }
+//     // return (c._state == RD_DONE);
+// }
+
+//ajouter le cas ->keep-alive
+static bool shouldCloseByStatus(int statusCode)
+{
+    // 400/413/408 要 close
+    if (statusCode == 400 || statusCode == 413 || statusCode == 408 || statusCode == 431 || statusCode == 414 || statusCode == 501)
+        return (true);
+    return (false);
+}
+
+static bool computeKeepAlive(const HTTPRequest& req, int statusCode)
+{
+    // 客户端显式 close -> 永远 close（ parser 已经把 req.keep_alive 置 false）
+    if (!req.keep_alive)
+        return (false);
+
+    // 解析错误阶段:先稳妥统一 close，这里就按状态码关
+    if (shouldCloseByStatus(statusCode))
+        return (false);
+
+    // 403/404/405/500 走这里 -> keep-alive
+    return (true);
+}
+
+static void applyConnectionHeader(HTTPResponse& resp, bool keepAlive)
+{
+    resp.headers["connection"] = keepAlive ? "keep-alive" : "close";
+}
+
+
 bool Server::do_read(Client &c)
 {
     char tmp[4096];
-    // bool is_reading = true;
 
     while (true)
     {
@@ -106,13 +190,15 @@ bool Server::do_read(Client &c)
             if (!ok && c.parser.getRequest().bad_request)
             {
                 c._state = ERROR;
-                // 生成错误响应//
-                HTTPResponse err = buildErrorResponse(400); // 暂时先放400，后续可以根据具体的error_code来修改
-                // HTTPResponse err = buildErrorResponse(c.parser.getRequest().error_code);
-                c.is_keep_alive = false;
+                const HTTPRequest& req = c.parser.getRequest();
+                int code = req.error_code > 0 ? req.error_code : 400;
+                HTTPResponse err = buildErrorResponse(code);
+                bool ka = computeKeepAlive(req, code);
+                c.is_keep_alive = ka;
+                applyConnectionHeader(err, ka);
                 c.write_buffer = ResponseBuilder::build(err);
                 c.write_pos = 0;
-                return (true); // 让上层切到 WRITING
+                return (true);
             }
         }
         else if (n == 0)
@@ -128,25 +214,34 @@ bool Server::do_read(Client &c)
             return (false);
         }
     }
+
     if (c.parser.getRequest().complet)
     {
         c._state = PROCESS;
         return (true);
     }
     return (false);
-    // while (is_reading)
-    // {
-    //     if (c._state == RD_LINE)
-    //         is_reading = read_request_line(c);
-    //     else if (c._state == RD_HEADER)
-    //         is_reading = read_request_header(c);
-    //     else if (c._state == RD_BODY)
-    //         is_reading = read_request_body(c);
-    //     else
-    //         is_reading = false;
-    // }
-    // return (c._state == RD_DONE);
 }
+
+
+// void Server::handle_cgi_read_error(Client &c, int pipe_fd)
+// {
+//     _epoller.del_event(pipe_fd);
+//     _manager.del_cgi_fd(pipe_fd);
+
+//     kill(c._cgi->get_pid(), SIGKILL);
+//     waitpid(c._cgi->get_pid(), NULL, 0);
+//     c._cgi->reset();
+
+//     HTTPResponse err = buildErrorResponse(500);
+//     c.write_buffer = ResponseBuilder::build(err);
+//     c.write_pos = 0;
+//     c._state = WRITING;
+//     c.is_keep_alive = false;
+//     // _epoller.modif_event(pipe_fd, EPOLLOUT | EPOLLET);
+//     _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+// }
+
 void Server::handle_cgi_read_error(Client &c, int pipe_fd)
 {
     _epoller.del_event(pipe_fd);
@@ -156,14 +251,18 @@ void Server::handle_cgi_read_error(Client &c, int pipe_fd)
     waitpid(c._cgi->get_pid(), NULL, 0);
     c._cgi->reset();
 
+    const HTTPRequest& req = c.parser.getRequest();
     HTTPResponse err = buildErrorResponse(500);
+    bool ka = computeKeepAlive(req, 500);
+    c.is_keep_alive = ka;
+    applyConnectionHeader(err, ka);
+
     c.write_buffer = ResponseBuilder::build(err);
     c.write_pos = 0;
     c._state = WRITING;
-    c.is_keep_alive = false;
-    // _epoller.modif_event(pipe_fd, EPOLLOUT | EPOLLET);
     _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
 }
+
 
 void Server::handle_cgi_read(Client &c, int pipe_fd)
 {
@@ -183,6 +282,10 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
             HTTPResponse resp;
             resp = resp.buildResponseFromCGIOutput(c._cgi->get_output(),
                                                    c.parser.getRequest().keep_alive);
+            //keep-alive
+            bool ka = computeKeepAlive(c.parser.getRequest(), resp.statusCode);
+            c.is_keep_alive = ka;
+            applyConnectionHeader(resp, ka);
             c.write_buffer = ResponseBuilder::build(resp);
             c.write_pos = 0;
 
@@ -218,11 +321,18 @@ void Server::handle_pipe_error(int fd)
         waitpid(c->_cgi->get_pid(), NULL, WNOHANG);
     }
     c->_cgi->reset();
+    // HTTPResponse err = buildErrorResponse(500);
+
+    //keep-alive
     HTTPResponse err = buildErrorResponse(500);
+    bool ka = computeKeepAlive(c->parser.getRequest(), 500);
+    c->is_keep_alive = ka;
+    applyConnectionHeader(err, ka);
+
     c->write_buffer = ResponseBuilder::build(err);
     c->write_pos = 0;
     c->_state = WRITING;
-    c->is_keep_alive = false;
+    // c->is_keep_alive = false;
 
     _epoller.modif_event(c->client_fd, EPOLLOUT | EPOLLET);
 }
@@ -312,7 +422,12 @@ void Server::run()
                     {
                         HTTPRequest req = c->parser.getRequest();
                         HTTPResponse resp = process_request(req);
-                        c->is_keep_alive = req.keep_alive;
+                        // c->is_keep_alive = req.keep_alive;
+                        //keep-alive
+                        bool ka = computeKeepAlive(req, resp.statusCode);
+                        c->is_keep_alive = ka;
+                        applyConnectionHeader(resp, ka);
+
                         c->write_buffer = ResponseBuilder::build(resp);
                         c->write_pos = 0;
                     }
@@ -445,12 +560,21 @@ bool Server::do_write(Client &c)
         ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
         if (n > 0)
             c.write_pos += n;
+        // else
+        // {
+        //     if (errno == EAGAIN || errno == EWOULDBLOCK)
+        //         return (false);
+        //     c._state = ERROR;
+        //     return (true); // 让上层走 close
+        // }
         else
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 return (false);
-            c._state = ERROR;
-            return (true); // 让上层走 close
+            c.is_keep_alive = false;// <- 强制关
+            // c._state = ERROR;
+            c._state = WRITING;
+            return (true);
         }
     }
     return (true); // 写完
