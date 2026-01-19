@@ -85,14 +85,16 @@ void Server::process_request(Client &c)
 {
     const HTTPRequest &req = c.parser.getRequest();
 
+    if (req.complet)
+        c.last_active = std::time(0);
     if (req.is_cgi_request())
     {
         // CGI 处理
         spawn_cgi(c, "./www" + req.path); // 最小测试用
-        c._state = WRITING;               // 输出通过 pipe 非阻塞写
-        _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
-        _epoller.add_event(c._cgi->get_read_fd(), EPOLLIN | EPOLLET);
-        _manager.bind_cgi_fd(c._cgi->get_read_fd(), c.client_fd);
+        c._state = PROCESS;               // 输出通过 pipe 非阻塞写
+       // _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+        _epoller.add_event(c._cgi->_read_fd, EPOLLIN | EPOLLET);
+        _manager.bind_cgi_fd(c._cgi->_read_fd, c.client_fd);
     }
     else
     {
@@ -136,6 +138,7 @@ int main(int ac, char **av)
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     signal(SIGPIPE, SIG_IGN);
+
     try
     {
         Server server(port);
@@ -154,3 +157,4 @@ int main(int ac, char **av)
  * lsof -i :端口号   检查端口是否被占用
  *   fuser -k 8080/tcp 清空端口号连接
  */
+

@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
+#include <ctime>
 
 class Epoller;
 class ResponseBuilder;
@@ -41,6 +42,12 @@ public:
     bool do_read(Client &c);
     bool do_write(Client &c);
 
+    void close_client(int fd);
+
+    void check_timeout();
+    void check_cgi_timeout();
+
+    // for test
     void process_request(Client &c);
 
 private:

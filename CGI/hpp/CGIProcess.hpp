@@ -36,12 +36,14 @@ struct CGI_ENV
 class CGI_Process
 {
 private:
+public:
     pid_t _pid;
     int _read_fd;
     int _write_fd;
-    std::string _output_buffer;
 
-public:
+    std::string _output_buffer;
+    time_t start_time;
+
     CGI_Process();
     ~CGI_Process();
 
@@ -52,29 +54,17 @@ public:
     void append_output(const char *buf, size_t n);
     void set_non_block_fd(int fd);
 
-    pid_t get_pid() const
-    {
-        return _pid;
-    }
-    int get_read_fd() const
-    {
-        return _read_fd;
-    }
-    void    set_pid(pid_t pid)
+    void set_pid(pid_t pid)
     {
         _pid = pid;
     }
-    void    set_read_fd(pid_t read_pid)
+    void set_read_fd(pid_t read_pid)
     {
         _read_fd = read_pid;
     }
-    void    set_write_fd(pid_t pid)
+    void set_write_fd(pid_t pid)
     {
         _write_fd = pid;
-    }
-    std::string get_output()
-    {
-        return _output_buffer;
     }
 };
 

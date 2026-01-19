@@ -1,6 +1,5 @@
 #include <iostream>
 #include "Event/hpp/Server.hpp"
-#include "Event/hpp/EpollManager.hpp"
 
 int main()
 {
