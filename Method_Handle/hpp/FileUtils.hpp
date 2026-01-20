@@ -24,7 +24,9 @@ public:
 
         // FileUtils.hpp
         static bool fileSize(const std::string& path, std::size_t& outSize, int& outErrno);
-
+        
+        static std::string trimCopy(std::string s);
+        static std::string mimeMainLower(const std::string& ct);
 };
 
 #endif

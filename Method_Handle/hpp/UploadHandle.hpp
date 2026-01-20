@@ -2,6 +2,7 @@
 #define UPLOADHANDLE_HPP
 
 #include <string>
+#include <cctype>
 #include "HTTP/hpp/HTTPRequest.hpp"
 #include "HTTP/hpp/HTTPResponse.hpp"
 
@@ -20,8 +21,12 @@ private:
                              std::string& outPartContentType);
         static std::string sanitizeFilename(const std::string& filename);
         static std::string buildSuccessHtml(const std::string& savedAs);
-        // 工具：大小写不敏感 startsWith（MVP 用）
-        static bool startsWith(const std::string& s, const std::string& prefix);
+        
+        static std::size_t findNextBoundaryLine(const std::string& body,
+                                        std::size_t from,
+                                        const std::string& delim,
+                                        bool& outIsFinal);
+        
 };
 
 #endif

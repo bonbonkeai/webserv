@@ -148,7 +148,23 @@ bool FileUtils::fileSize(const std::string& path, std::size_t& outSize, int& out
     return (true);
 }
 
-bool startsWith(const std::string& s, const std::string& prefix)
+bool FileUtils::startsWith(const std::string& s, const std::string& prefix)
 {
     return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+}
+
+std::string FileUtils::trimCopy(std::string s)
+{
+    ltrimSpaces(s);
+    rtrimSpaces(s);
+    return (s);
+}
+
+ std::string FileUtils::mimeMainLower(const std::string& ct)
+{
+    std::size_t semi = ct.find(';');
+    std::string main = (semi == std::string::npos) ? ct : ct.substr(0, semi);
+    main = trimCopy(main);
+    toLowerInPlace(main);
+    return (main);
 }
