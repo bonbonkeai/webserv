@@ -321,7 +321,7 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
 
             saved = true;
             savedName = safe;
-            break; // MVP: 只保存第一个文件字段
+            break; //只保存第一个文件字段
         }
 
         // 找下一个 boundary（pos 当前指向 "--boundary..."）
