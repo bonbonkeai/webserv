@@ -1,7 +1,5 @@
 #include "Method_Handle/hpp/FileUtils.hpp"
-#include <sys/stat.h>
-#include <fstream>
-#include <cstdio>
+#include "HTTP/hpp/HTTPUtils.hpp" 
 
 bool FileUtils::isSafePath(const std::string& urlPath)
 {

@@ -11,6 +11,7 @@
 #include <iterator>
 #include <exception>
 #include <unistd.h>
+#include <sys/time.h>
 
 class   CGI_Process;
 /*表示一个客户端连接：

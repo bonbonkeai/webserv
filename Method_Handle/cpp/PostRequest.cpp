@@ -13,7 +13,7 @@ static std::string basenameUpload(const std::string& path)
 {
     // ps：/upload/<filename> 且 filename 不允许包含 '/'
     const std::string prefix = "/upload/";
-    if (!startsWith(path, prefix))
+    if (!FileUtils::startsWith(path, prefix))
         return ("");
 
     std::string name = path.substr(prefix.size());

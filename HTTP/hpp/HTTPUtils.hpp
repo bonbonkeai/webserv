@@ -14,11 +14,11 @@ void rtrimSpaces(std::string& s);
 bool isTChar(unsigned char c);
 
 //增加的针对URI的parser
-static bool uriCharset(char c);
-static bool isValidUriChar(const std::string& s);
-static bool isValidHostChar(char c);
-static bool isValidDomainLike(const std::string& host);
-static bool parsePort(const std::string& s, int& port_out);
-static bool isValidIp(const std::string& host);
+bool uriCharset(char c);
+bool isValidUriChar(const std::string& s);
+bool isValidHostChar(char c);
+bool isValidDomainLike(const std::string& host);
+bool parsePort(const std::string& s, int& port_out);
+bool isValidIp(const std::string& host);
 
 #endif

@@ -313,7 +313,7 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     // }
 
     //让大小写不敏感
-    if (mimeMainLower(ct) != "multipart/form-data")
+    if (FileUtils::mimeMainLower(ct) != "multipart/form-data")
     {
         outResp = buildErrorResponse(400);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
@@ -337,7 +337,7 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     const std::string& body = req.body;
 
     // 2) 定位第一个 boundary
-    // std::size_t pos = body.find(delim);
+    std::size_t pos = body.find(delim);
     // if (pos == std::string::npos)
     // {
     //     outResp = buildErrorResponse(400);

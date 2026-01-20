@@ -44,7 +44,7 @@ HTTPResponse StaticHandle::serveFile(const HTTPRequest& req, const std::string& 
     //     return (r);
     // }
     std::string content;
-    int err = 0;
+    err = 0;
     if (!FileUtils::readAll(fullPath, content, err))
     {
         int code;

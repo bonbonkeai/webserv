@@ -20,11 +20,12 @@ SRCS =	HTTP/cpp/HTTPRequest.cpp \
 		Method_Handle/cpp/RedirectHandle.cpp \
 		Method_Handle/cpp/StaticHandle.cpp \
 		Method_Handle/cpp/UploadHandle.cpp \
- 		Event/cpp/Client.cpp \
- 		Event/cpp/EpollManager.cpp \
- 		Event/cpp/Server.cpp \
- 		CGI/cpp/CGIProcess.cpp \
-		main.cpp
+		test_methods.cpp
+#  		Event/cpp/Client.cpp \
+#  		Event/cpp/EpollManager.cpp \
+#  		Event/cpp/Server.cpp \
+#  		CGI/cpp/CGIProcess.cpp \
+# 		main.cpp
 
 # 		test_http_parser.cpp 
 # 		test_methods.cpp  

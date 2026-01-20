@@ -2,6 +2,11 @@
 #define FILEUTILS_HPP
 
 #include <string>
+#include <fcntl.h>   // open, O_RDONLY
+#include <unistd.h>  // read, close
+#include <sys/stat.h>
+#include <fstream>
+#include <cstdio>
 
 class FileUtils
 {
