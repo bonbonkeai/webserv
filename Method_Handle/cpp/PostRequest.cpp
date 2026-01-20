@@ -4,11 +4,6 @@
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include "HTTP/hpp/HTTPUtils.hpp"
 
-static bool startsWith(const std::string& s, const std::string& prefix)
-{
-    return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
-}
-
 static bool isUploadEndpoint(const std::string& path)
 {
     return (path == "/upload" || path == "/upload/");

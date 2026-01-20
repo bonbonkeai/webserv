@@ -42,22 +42,48 @@ bool FileUtils::isDirectory(const std::string& path)
     return (S_ISDIR(st.st_mode));
 }
 
-bool FileUtils::readAll(const std::string& path, std::string& out)
-{
-    std::ifstream ifs(path.c_str(), std::ios::in | std::ios::binary);
-    if (!ifs.is_open())
-        return (false);
+// bool FileUtils::readAll(const std::string& path, std::string& out)
+// {
+//     std::ifstream ifs(path.c_str(), std::ios::in | std::ios::binary);
+//     if (!ifs.is_open())
+//         return (false);
 
-    std::string buf;
-    char tmp[4096];
-    while (ifs.good())
+//     std::string buf;
+//     char tmp[4096];
+//     while (ifs.good())
+//     {
+//         ifs.read(tmp, sizeof(tmp));
+//         std::streamsize n = ifs.gcount();
+//         if (n > 0)
+//             buf.append(tmp, (size_t)n);
+//     }
+//     out.swap(buf);
+//     return (true);
+// }
+
+bool FileUtils::readAll(const std::string& path, std::string& out, int& outErrno)
+{
+    out.clear();
+    outErrno = 0;
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0)
     {
-        ifs.read(tmp, sizeof(tmp));
-        std::streamsize n = ifs.gcount();
-        if (n > 0)
-            buf.append(tmp, (size_t)n);
+        outErrno = errno;
+        return (false);
     }
-    out.swap(buf);
+    char buf[4096];
+    ssize_t n;
+    while ((n = read(fd, buf, sizeof(buf))) > 0)
+    {
+        out.append(buf, n);
+    }
+    if (n < 0)
+    {
+        outErrno = errno;
+        close(fd);
+        return (false);
+    }
+    close(fd);
     return (true);
 }
 
@@ -93,4 +119,36 @@ std::string FileUtils::guessContentType(const std::string& path)
     if (endsWith(path, ".jpg") || endsWith(path, ".jpeg")) return "image/jpeg";
     if (endsWith(path, ".gif"))  return "image/gif";
     return ("application/octet-stream");
+}
+
+bool FileUtils::fileSize(const std::string& path, std::size_t& outSize, int& outErrno)
+{
+    outErrno = 0;
+    outSize = 0;
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0)
+    {
+        outErrno = errno;
+        return (false);
+    }
+    if (!S_ISREG(st.st_mode))
+    {
+        // 非普通文件，让上层按 isDirectory/403/404 处理
+        outErrno = 0;
+        outSize = 0;
+        return (true);
+    }
+    if (st.st_size < 0)
+    {
+        outErrno = 0;
+        outSize = 0;
+        return (true);
+    }
+    outSize = static_cast<std::size_t>(st.st_size);
+    return (true);
+}
+
+bool startsWith(const std::string& s, const std::string& prefix)
+{
+    return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
 }

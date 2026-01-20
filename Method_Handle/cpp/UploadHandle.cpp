@@ -4,11 +4,6 @@
 #include "HTTP/hpp/HTTPUtils.hpp"
 #include <sstream>
 
-bool UploadHandle::startsWith(const std::string& s, const std::string& prefix)
-{
-    return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
-}
-
 // bool UploadHandle::extractBoundary(const std::string& contentType, std::string& outBoundary)
 // {
 //     // ex: multipart/form-data; boundary=----WebKitFormBoundaryabc123

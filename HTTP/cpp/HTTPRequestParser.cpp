@@ -205,24 +205,69 @@ bool	HTTPRequestParser::parseRequestLine()
 	std::istringstream iss(line);
 	iss >> _req.method >> _req.uri >> _req.version;
 
-    static const std::size_t MAX_URI_LENGTH = 2048;
+    static const std::size_t MAX_URI_LENGTH = 4096;
 	if (!isTokenUpperAlpha(_req.method))
 		return (fail(400));
 	if (_req.method.empty() || _req.uri.empty() || _req.version.empty())
 		return (fail(400));
+    if (_req.version != "HTTP/1.1")
+		return (fail(505));
+     if (_req.method != "GET" && _req.method != "POST" && _req.method != "DELETE")
+        return (fail(405));
+	
+    //URI 长度
     if (_req.uri.size() > MAX_URI_LENGTH)
         return (fail(414));
-    if (_req.method != "GET" && _req.method != "POST" && _req.method != "DELETE")
-        {return (fail(405));}
-	if (_req.version != "HTTP/1.1")
-		{return (fail(505));}
+    // URI 字符集合法性
+    if (!isValidUriChar(_req.uri))
+        return fail(400);
+    // 如果是 absolute-form，把 authority 取出来，把 uri 改写成 origin-form（从 / 开始）
+    if (_req.uri.compare(0, 7, "http://") == 0)
+    {
+        size_t slash = _req.uri.find('/', 7);
+        if (slash == std::string::npos)
+            return (fail(400)); // 没有 path
+        std::string authority = _req.uri.substr(7, slash - 7);
+        std::string rest = _req.uri.substr(slash); // 从 '/' 开始（含 query）
+        // authority 不能为空
+        if (authority.empty())
+            return (fail(400));
+        // authority: host[:port]
+        std::string host = authority;
+        size_t colon = authority.find(':');
+        if (colon != std::string::npos)
+        {
+            host = authority.substr(0, colon);
+             std::string port_str = authority.substr(colon + 1);
+
+            int port_num = 0;
+            if (!parsePort(port_str, port_num))
+                return (fail(400));
+            // 还需要检查端口是否等于 server listen port（依赖 config）
+            // (需要把 server_port 注入 parser)
+        }
+        // if (!isValidDomainLike(host))
+        //         return (fail(400));
+        if (!isValidDomainLike(host) && !isValidIp(host))
+            return fail(400);
+        _req.authority = authority;
+        _req.uri = rest;
+        // 改写后再次检查长度（防御）
+        if (_req.uri.size() > MAX_URI_LENGTH)
+            return (fail(414));
+    }
+    // origin-form must begin with '/'
+    if (_req.uri.empty() || _req.uri[0] != '/')
+        return (fail(400));
+    // block '..' => 403
+    if (_req.uri.find("..") != std::string::npos)
+        return (fail(403));
 	_req.keep_alive = true;
 	splitUri();
     _chunk_waiting_size = true;
     _chunk_expected_size = 0;
 	_state = WAIT_HEADERS;
 	return (true);
-
 }
 
 bool HTTPRequestParser::parseHeaders()
@@ -248,9 +293,15 @@ bool HTTPRequestParser::parseHeaders()
 				if (_req.headers.find("host") == _req.headers.end())
 					return (fail(400));
             }
-            //2)chunked 与 content-length 不能同时存在->目前先不处理chunked
+            //2)chunked 与 content-length 不能同时存在
             if (_req.chunked && _req.has_content_length)
                 return (fail(400));
+            //两者都没有 -> 411 Length Required（POST 必须有长度信息（Content-Length 或 chunked），否则 411）
+            if (_req.method == "POST")
+            {
+                if (!_req.chunked && !_req.has_content_length)
+                    return (fail(411));
+            }
             //3)如果有 content-length（且没 chunked），决定 body
 			// if (_req.has_content_length && _req.contentLength > 0)
 			// 	_req.has_body = true;
@@ -299,8 +350,21 @@ bool HTTPRequestParser::parseHeaders()
         //5)Host 唯一性（重复 host -> 400）
         if (key == "host")
         {
+            // if (_req.headers.count("host"))
+            //     return (fail(400));
+            // 1) Host 头重复 -> 400
             if (_req.headers.count("host"))
                 return (fail(400));
+            // 2) absolute-form 情况下，Host 必须与 authority 一致（大小写不敏感）
+            if (!_req.authority.empty())
+            {
+                std::string host_hdr = val;
+                std::string authority = _req.authority;
+                toLowerInPlace(host_hdr);
+                toLowerInPlace(authority);
+                if (host_hdr != authority)
+                    return (fail(400));
+            }
         }
         //6)Content-Length 严格校验（纯数字、无溢出、唯一性）
         if (key == "content-length")
@@ -321,21 +385,42 @@ bool HTTPRequestParser::parseHeaders()
         }
         //7)Transfer-Encoding 只支持 chunked，且唯一性
         // if (key == "transfer-encoding")
-		// 	return (fail(501)); //暂不支持 chunked
+        // {
+        //     if (_req.has_transfer_encoding)
+        //         return (fail(400));
+        //     _req.has_transfer_encoding = true;
+        //     std::string te = val;
+        //     toLowerInPlace(te);
+        //     ltrimSpaces(te);
+        //     rtrimSpaces(te);
+        //     // 只要包含 chunked 就认为 chunked
+        //     if (te == "chunked")
+        //         _req.chunked = true;
+        //     else
+        //         return fail(501);
+        //     _req.headers[key] = val;
+        //     continue;
+        // }
         if (key == "transfer-encoding")
         {
             if (_req.has_transfer_encoding)
-                return (fail(400));
+                return fail(400);
             _req.has_transfer_encoding = true;
             std::string te = val;
             toLowerInPlace(te);
-            ltrimSpaces(te);
-            rtrimSpaces(te);
-            // 只要包含 chunked 就认为 chunked
-            if (te == "chunked")
-                _req.chunked = true;
-            else
-                return fail(501);
+            bool found_chunked = false;
+            std::stringstream ss(te);
+            std::string token;
+            while (std::getline(ss, token, ','))
+            {
+                ltrimSpaces(token);
+                rtrimSpaces(token);
+                if (token == "chunked")
+                    found_chunked = true;
+            }
+            if (!found_chunked)
+                return (fail(501));
+            _req.chunked = true;
             _req.headers[key] = val;
             continue;
         }
@@ -494,7 +579,8 @@ bool HTTPRequestParser::parseChunkedBody()
         _buffer.erase(0, _chunk_expected_size);
 
         // 必须跟着 CRLF
-        if (_buffer.size() < 2 || _buffer.substr(0, 2) != "\r\n")
+        // if (_buffer.size() < 2 || _buffer.substr(0, 2) != "\r\n")
+        if (_buffer.size() < 2 || _buffer.compare(0, 2, "\r\n") != 0)
             return (fail(400));
         _buffer.erase(0, 2);
         // 当前 chunk 完成，回到读取下一块 size 行

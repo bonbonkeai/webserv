@@ -16,7 +16,8 @@ HTTPRequest::HTTPRequest() : method(""),
 			error_code(200),
             has_transfer_encoding(false),
             chunked(false),
-            max_body_size(1024 * 1024 * 10) // 先临时 10MB
+            max_body_size(1024 * 1024 * 10), // 先临时 10MB
+            authority("")
 
 {
 }
@@ -38,7 +39,8 @@ HTTPRequest::HTTPRequest(const HTTPRequest& copy)
 	  error_code(copy.error_code),
       has_transfer_encoding(copy.has_transfer_encoding),
       chunked(copy.chunked),
-      max_body_size(copy.max_body_size)
+      max_body_size(copy.max_body_size),
+      authority(copy.authority)
 {
 }
 
@@ -63,6 +65,7 @@ HTTPRequest& HTTPRequest::operator=(const HTTPRequest& copy)
         has_transfer_encoding = copy.has_transfer_encoding;
         chunked = copy.chunked;
         max_body_size = copy.max_body_size;
+        authority = copy.authority;
     }
     return (*this);
 }

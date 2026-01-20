@@ -62,9 +62,11 @@ struct Client
       write_pos(0),
       is_keep_alive(false),
       _cgi(NULL),
-      is_cgi(false)
+      is_cgi(false),
+      last_activity_ms(0)
 	{
 		read_buffer.reserve(4096);
+        last_activity_ms = now_ms();
 	}
 	void reset()
 	{
@@ -75,11 +77,25 @@ struct Client
 		is_keep_alive = false;
 		parser.reset();
         is_cgi = false;
+        last_activity_ms = now_ms(); 
 	}
 
     int get_fd()
     {
         return client_fd;
+    }
+
+    unsigned long long last_activity_ms;
+    bool is_timeout(unsigned long long now_ms, unsigned long long timeout_ms) const
+    {
+        return (now_ms - last_activity_ms) > timeout_ms;
+    }
+
+    static unsigned long long now_ms()
+    {
+        struct timeval tv;
+        gettimeofday(&tv, 0);
+        return (unsigned long long)tv.tv_sec * 1000ULL + (unsigned long long)tv.tv_usec / 1000ULL;
     }
 };
 
