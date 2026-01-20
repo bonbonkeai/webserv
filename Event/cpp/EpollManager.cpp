@@ -5,7 +5,9 @@ Epoller::Epoller()
 {}
 
 Epoller::~Epoller()
-{}
+{
+    
+}
 
 bool    Epoller::init(int max_size)
 {

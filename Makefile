@@ -1,7 +1,8 @@
 CPPC = c++
 
-CFLAG = -Wall -Wextra -Werror -std=c++98
+CFLAG = -Wall -Wextra -Werror -std=c++98 -g3
 
+VALGRIND_FLAG = --leak-check=full --show-leak-kinds=all --trace-children=yes --child-silent-after-fork=yes 
 INCLUDES = -I./includes -I.
 
 SRCS =	HTTP/cpp/HTTPRequest.cpp \
@@ -34,7 +35,7 @@ SRCS =	HTTP/cpp/HTTPRequest.cpp \
 
 OBJS = $(SRCS:.cpp=.o)
 
-NAME = test_methods
+NAME = test
 # NAME = webserv
 
 all: $(NAME)
@@ -55,5 +56,9 @@ re: fclean all
 
 debug: CFLAG += -DDEBUG_SHOW -g
 debug: fclean all
+
+valgrind:  all 
+	make re 
+	@valgrind $(VALGRIND_FLAG) ./$(NAME)
 
 .PHONY: all clean fclean re

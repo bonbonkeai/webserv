@@ -53,6 +53,7 @@ struct Client
     // cgi
     CGI_Process *_cgi;
     bool is_cgi;
+    bool  timeout;
 
     // timeout
     time_t last_active;

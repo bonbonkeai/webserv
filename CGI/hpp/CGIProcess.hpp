@@ -53,19 +53,6 @@ public:
     void reset();
     void append_output(const char *buf, size_t n);
     void set_non_block_fd(int fd);
-
-    void set_pid(pid_t pid)
-    {
-        _pid = pid;
-    }
-    void set_read_fd(pid_t read_pid)
-    {
-        _read_fd = read_pid;
-    }
-    void set_write_fd(pid_t pid)
-    {
-        _write_fd = pid;
-    }
 };
 
 #endif

@@ -1,6 +1,7 @@
 #include "../hpp/CGIProcess.hpp"
 
-CGI_Process::CGI_Process() : _pid(-1), _read_fd(-1)
+CGI_Process::CGI_Process() : _pid(-1), _read_fd(-1), _write_fd(-1), _output_buffer(""),
+                             start_time(std::time(0))
 {
 }
 
@@ -70,8 +71,9 @@ void CGI_Process::reset()
     }
     if (_pid > 0)
     {
+        int status;
         kill(_pid, SIGKILL);
-        waitpid(_pid, NULL, WNOHANG);
+        waitpid(_pid, &status, 0);
         _pid = -1;
     }
     _output_buffer.clear();
@@ -125,7 +127,7 @@ bool CGI_Process::execute(const std::string &script_path, HTTPRequest &req)
     set_non_block_fd(_read_fd);
     set_non_block_fd(_write_fd);
     if (req.method == "POST" && req.has_body)
-    //write the content in the body 
+        // write the content in the body
         write(pipe_in[1], req.body.c_str(), req.body.size());
     close(_write_fd);
     _write_fd = -1;

@@ -6,6 +6,8 @@
 #define ALL_TIMEOUT 5
 #define CGI_TIMEOUT 5
 
+#define TRACE() std::cout << "[TRACE] " << __FILE__ << ":" << __LINE__ << std::endl;
+
 // 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
 Server::Server(int port) : port_nbr(port), socketfd(-1)
 {
@@ -163,7 +165,7 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
         {
             _epoller.del_event(pipe_fd);
             _manager.del_cgi_fd(pipe_fd);
-            waitpid(c._cgi->_pid, NULL, WNOHANG);
+            waitpid(c._cgi->_pid, NULL, 0);
 
             // client prepare la reponse
             HTTPResponse resp;
@@ -171,8 +173,20 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
                                                    c.parser.getRequest().keep_alive);
             c.write_buffer = ResponseBuilder::build(resp);
             c.write_pos = 0;
+            c.is_keep_alive = true;
 
-            // c._cgi->reset();
+            if (c._cgi->_write_fd >= 0)
+            {
+                close(c._cgi->_write_fd);
+                c._cgi->_write_fd = -1;
+            }
+            if (c._cgi->_read_fd >= 0)
+            {
+                close(c._cgi->_read_fd);
+                c._cgi->_read_fd = -1;
+            }
+
+            c._cgi->reset();
             c.is_cgi = false;
 
             c._state = WRITING;
@@ -201,7 +215,7 @@ void Server::handle_pipe_error(int fd)
     if (c->_cgi->_pid > 0)
     {
         kill(c->_cgi->_pid, SIGKILL);
-        waitpid(c->_cgi->_pid, NULL, WNOHANG);
+        waitpid(c->_cgi->_pid, NULL, 0);
     }
     c->_cgi->reset();
     HTTPResponse err = buildErrorResponse(500);
@@ -253,7 +267,6 @@ void Server::close_client(int fd)
 void Server::check_cgi_timeout()
 {
     time_t now = std::time(0);
-    std::vector<int> to_close;
 
     std::map<int, Client *> &cgi_clients = _manager.get_all_cgi_clients();
     for (std::map<int, Client *>::iterator it = cgi_clients.begin(); it != cgi_clients.end(); ++it)
@@ -265,37 +278,30 @@ void Server::check_cgi_timeout()
             continue;
         if ((now - c->_cgi->start_time) > CGI_TIMEOUT)
         {
-            std::cout << "TIMEOUT: " << c->client_fd << "|is_cgi: " << c->is_cgi << std::endl;
-            to_close.push_back(cgi->_read_fd);
             if (cgi->_pid > 0)
             {
-                //可能需要一个reponse的输出
                 kill(cgi->_pid, SIGKILL);
                 waitpid(cgi->_pid, NULL, 0);
             }
-            if (cgi->_read_fd >= 0)
-                close(cgi->_read_fd);
             if (cgi->_write_fd >= 0)
+            {
                 close(cgi->_write_fd);
-            cgi->reset();
-            c->is_cgi = false;
+                cgi->_write_fd = -1;
+            }
 
-            HTTPResponse err = buildErrorResponse(504); // Gateway Timeout
-            c->write_buffer = ResponseBuilder::build(err);
+            //need reponse for client error 504
+            HTTPResponse rep = buildErrorResponse(504);
+
+            c->write_buffer = "HTTP/1.1 504 error\r\nContent-Length: " + toString(c->_cgi->_output_buffer.size()) + "\r\n\r\n" + c->_cgi->_output_buffer;
             c->write_pos = 0;
-            c->_state = WRITING;
-            c->is_keep_alive = false;
 
+            c->_state = WRITING;
+            c->is_cgi = false;
+            delete c->_cgi;
+            c->_cgi = NULL;
             // 修改客户端事件为可写
             _epoller.modif_event(c->client_fd, EPOLLOUT | EPOLLET);
-            to_close.push_back(it->first);
         }
-    }
-
-    for (size_t i = 0; i < to_close.size(); i++)
-    {
-        _epoller.del_event(to_close[i]);
-        _manager.del_cgi_fd(to_close[i]);
     }
 }
 
@@ -308,11 +314,8 @@ void Server::check_timeout()
     for (std::map<int, Client *>::iterator it = clients.begin(); it != clients.end(); it++)
     {
         Client *c = it->second;
-        if (c->is_timeout(now, ALL_TIMEOUT) && !c->is_cgi)
-        {
-            std::cout << "TIMEOUT: " << c->client_fd << "|is_cgi: " << c->is_cgi << std::endl;
+        if (!c->is_cgi && c->is_timeout(now, ALL_TIMEOUT))
             to_close.push_back(c->client_fd);
-        }
     }
     for (size_t i = 0; i < to_close.size(); i++)
         close_client(to_close[i]);
@@ -375,7 +378,6 @@ void Server::run()
             }
             if (events & EPOLLOUT)
             {
-
                 if (do_write(*c))
                 {
                     c->last_active = std::time(0);

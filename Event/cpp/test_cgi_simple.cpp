@@ -44,9 +44,8 @@ void spawn_cgi(Client &c, const std::string &script_path)
     else
     {
         // parent
-        close(pipe_out[1]);
-        close(pipe_in[0]);
-        //for the test only
+
+        // for the test only
         int status;
         waitpid(pid, &status, 0); // 阻塞等 CGI 完
         char buf[4096];
@@ -54,14 +53,18 @@ void spawn_cgi(Client &c, const std::string &script_path)
         std::string output(buf, n);
 
         c.write_buffer = "HTTP/1.1 200 OK\r\nContent-Length: " + toString(output.size()) + "\r\n\r\n" + output;
+        std::cout << "write buffer in spawn cgi: " << c.write_buffer << std::endl;
         c.write_pos = 0;
         c._state = WRITING;
         //
         c._cgi = new CGI_Process();
-        c._cgi->set_pid(pid);
-        c._cgi->set_read_fd(pipe_out[0]);
-        c._cgi->set_write_fd(pipe_in[1]);
+        c._cgi->_pid = pid;
+        c._cgi->_read_fd = pipe_out[0];
+        c._cgi->_write_fd = pipe_in[1];
         c.is_cgi = true;
+
+        close(pipe_out[1]);
+        close(pipe_in[0]);
     }
 }
 bool HTTPRequest::is_cgi_request() const
@@ -92,7 +95,7 @@ void Server::process_request(Client &c)
         // CGI 处理
         spawn_cgi(c, "./www" + req.path); // 最小测试用
         c._state = PROCESS;               // 输出通过 pipe 非阻塞写
-       // _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+                                          // _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
         _epoller.add_event(c._cgi->_read_fd, EPOLLIN | EPOLLET);
         _manager.bind_cgi_fd(c._cgi->_read_fd, c.client_fd);
     }
@@ -157,4 +160,3 @@ int main(int ac, char **av)
  * lsof -i :端口号   检查端口是否被占用
  *   fuser -k 8080/tcp 清空端口号连接
  */
-
