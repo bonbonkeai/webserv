@@ -1,3 +1,5 @@
-#!/bin/sh
-sleep 100
-echo "CGI done"
+#!/bin/bash
+sleep 15
+echo "Content-Type: text/plain"
+echo ""
+echo "Hello"

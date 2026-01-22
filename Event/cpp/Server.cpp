@@ -7,6 +7,8 @@
 #define ALL_TIMEOUT_MS 5000ULL
 #define CGI_TIMEOUT_MS 10000ULL
 
+#define TRACE() std::cout << "[TRACE] " << __FILE__ << ":" << __LINE__ << std::endl;
+
 // ajouter le cas ->keep-alive
 static bool shouldCloseByStatus(int statusCode)
 {
@@ -102,10 +104,10 @@ bool Server::handle_connection()
         _epoller.add_event(connect_fd, EPOLLIN | EPOLLET);
         _manager.add_socket_client(connect_fd); // client state is read_line
         // 这里面更新时间没有必要，因为add socket client的时候，client construit的时候就已经有一个时间设置了
-       // Client *c = _manager.get_socket_client_by_fd(connect_fd);
-       // if (c)
-       //     c->last_activity_ms = Client::now_ms();
-       // 
+        // Client *c = _manager.get_socket_client_by_fd(connect_fd);
+        // if (c)
+        //     c->last_activity_ms = Client::now_ms();
+        //
     }
     return true;
 }
@@ -123,6 +125,17 @@ HTTPResponse Server::process_request(const HTTPRequest &req)
     IRequest *h = RequestFactory::create(req);
     HTTPResponse resp = h->handle();
     delete h;
+    // if (req.is_cgi_request())
+    //{
+    //     c._cgi = new CGI_Process();
+    //     c._cgi->execute("./www" + req.path, const_cast<HTTPRequest&>(req));
+    //     c.is_cgi = true;
+    //     c._state = PROCESS;
+    //
+    //    _epoller.add_event(c._cgi->_read_fd, EPOLLIN| EPOLLOUT);
+    //    _manager.bind_cgi_fd(c._cgi->_read_fd, c.client_fd);
+    //    return (resp);
+    //}
     return (resp);
 }
 
@@ -533,6 +546,16 @@ void Server::run()
                     {
                         HTTPRequest req = c->parser.getRequest();
                         HTTPResponse resp = process_request(req);
+                        if (req.is_cgi_request())
+                        {
+                            c->_cgi = new CGI_Process();
+                            c->_cgi->execute("./www" + req.path, const_cast<HTTPRequest &>(req));
+                            c->is_cgi = true;
+
+                            _epoller.add_event(c->_cgi->_read_fd, EPOLLIN | EPOLLET);
+                            _manager.bind_cgi_fd(c->_cgi->_read_fd, c->client_fd);
+                            continue;
+                        }
                         // c->is_keep_alive = req.keep_alive;
                         // keep-alive
                         bool ka = computeKeepAlive(req, resp.statusCode);
@@ -542,8 +565,11 @@ void Server::run()
                         c->write_buffer = ResponseBuilder::build(resp);
                         c->write_pos = 0;
                     }
-                    c->_state = WRITING;
-                    _epoller.modif_event(fd, EPOLLOUT | EPOLLET);   
+                    if (!c->is_cgi)
+                    {
+                        c->_state = WRITING;
+                        _epoller.modif_event(fd, EPOLLOUT | EPOLLET);
+                    }
                 }
             }
             if (events & EPOLLOUT)
@@ -669,6 +695,7 @@ bool Server::do_write(Client &c)
     while (c.write_pos < c.write_buffer.size())
     {
         ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
+        std::cout << "write n: " << n << std::endl;
         if (n > 0)
             c.write_pos += n;
         // else
@@ -753,14 +780,18 @@ void Server::check_cgi_timeout()
     std::map<int, Client *> &cgi_clients = _manager.get_all_cgi_clients();
     for (std::map<int, Client *>::iterator it = cgi_clients.begin(); it != cgi_clients.end(); ++it)
     {
+
         int pipe_fd = it->first; // 约定key就是read pipe fd
         Client *c = it->second;
         CGI_Process *cgi = c ? c->_cgi : 0;
 
         if (!c || !cgi || !c->is_cgi)
             continue;
+        if (c->_state == WRITING)
+            continue;
         if (cgi->start_time_ms > 0 && (now - cgi->start_time_ms) > CGI_TIMEOUT_MS)
         {
+            std::cout << "check cgi timeout" << std::endl;
             // 1) 只 kill/waitpid 一次（不在 del_cgi_fd 再做）
             terminateCgiOnce(cgi);
 

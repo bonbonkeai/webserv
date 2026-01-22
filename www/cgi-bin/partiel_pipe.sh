@@ -1,3 +1,5 @@
 #!/bin/sh
-echo "partial output"
+echo "Content-Type: text/plain"  
+echo ""                           
+echo "partial output"            
 sleep 100
