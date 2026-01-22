@@ -3,7 +3,7 @@
 
 #include "../../HTTP/hpp/HTTPRequest.hpp"
 #include "../../HTTP/hpp/HTTPResponse.hpp"
-#include "Event/hpp/Client.hpp"
+
 
 #include <iostream>
 #include <vector>
@@ -36,13 +36,16 @@ struct CGI_ENV
 class CGI_Process
 {
 private:
+
 public:
     pid_t _pid;
     int _read_fd;
     int _write_fd;
-
     std::string _output_buffer;
-    time_t start_time;
+
+    // time_t start_time;
+
+    unsigned long long start_time_ms;
 
     CGI_Process();
     ~CGI_Process();
@@ -53,6 +56,9 @@ public:
     void reset();
     void append_output(const char *buf, size_t n);
     void set_non_block_fd(int fd);
+
+    //del_cgi_fd()调用
+    void reset_no_kill();
 };
 
 #endif

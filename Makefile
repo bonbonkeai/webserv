@@ -31,8 +31,6 @@ SRCS =	HTTP/cpp/HTTPRequest.cpp \
 	#	test_methods.cpp  
 	#	test_http_parser.cpp  
 		
-	
-
 OBJS = $(SRCS:.cpp=.o)
 
 NAME = test

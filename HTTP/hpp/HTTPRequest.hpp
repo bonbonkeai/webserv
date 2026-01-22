@@ -49,6 +49,8 @@ public:
         std::size_t max_body_size; //先写死，后面接入config
         bool    is_cgi_request() const;
 
+
+        std::string authority;
 };
 
 #endif

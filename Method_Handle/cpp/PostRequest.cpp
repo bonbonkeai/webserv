@@ -4,11 +4,6 @@
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include "HTTP/hpp/HTTPUtils.hpp"
 
-static bool startsWith(const std::string& s, const std::string& prefix)
-{
-    return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
-}
-
 static bool isUploadEndpoint(const std::string& path)
 {
     return (path == "/upload" || path == "/upload/");
@@ -18,7 +13,7 @@ static std::string basenameUpload(const std::string& path)
 {
     // ps：/upload/<filename> 且 filename 不允许包含 '/'
     const std::string prefix = "/upload/";
-    if (!startsWith(path, prefix))
+    if (!FileUtils::startsWith(path, prefix))
         return ("");
 
     std::string name = path.substr(prefix.size());
@@ -78,12 +73,11 @@ HTTPResponse PostRequest::handle()
 {
     const bool hasCT = _req.headers.count("content-type");
     const std::string ct = hasCT ? _req.headers.find("content-type")->second : "";
-    const bool isMultipart =
-        hasCT && ct.find("multipart/form-data") != std::string::npos;
-    // ---------- 情况 1：POST /upload ----------
+    const bool isMultipart = hasCT && ct.find("multipart/form-data") != std::string::npos;
+    // ---------- case 1：POST /upload ----------
     if (isUploadEndpoint(_req.path))
     {
-        // 1.1 只允许 multipart
+        // 只允许 multipart
         if (!isMultipart)
         {
             HTTPResponse r = buildErrorResponse(415); // Unsupported Media Type
@@ -96,14 +90,14 @@ HTTPResponse PostRequest::handle()
             return (resp);
         return (resp); // 错误已填充
     }
-    // ---------- 情况 2：multipart 但不是 /upload ----------
+    // ---------- case 2：multipart 但不是 /upload ----------
     if (isMultipart)
     {
         HTTPResponse r = buildErrorResponse(403);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
-    // ---------- 情况 3：fallback raw upload (/upload/<filename>) ----------
+    // ---------- case 3：fallback raw upload (/upload/<filename>) ----------
     return handleRawUploadFallback();
 }
 

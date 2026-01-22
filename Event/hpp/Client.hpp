@@ -11,7 +11,7 @@
 #include <iterator>
 #include <exception>
 #include <unistd.h>
-#include <ctime>
+#include <sys/time.h>
 
 class CGI_Process;
 /*表示一个客户端连接：
@@ -53,36 +53,55 @@ struct Client
     // cgi
     CGI_Process *_cgi;
     bool is_cgi;
-    bool  timeout;
 
     // timeout
+    bool timeout;
     time_t last_active;
-    bool is_timeout(time_t now, time_t def_timeout)
+    unsigned long long last_activity_ms;
+    bool is_timeout(unsigned long long now_ms, unsigned long long timeout_ms) const
     {
-        return ((now - last_active) > def_timeout);
+        return (now_ms - last_activity_ms) > timeout_ms;
     }
 
-    Client(int fd = -1) : client_fd(fd),
-                          _state(READING),
-                          read_buffer(),
-                          parser(),
-                          write_buffer(),
-                          write_pos(0),
-                          is_keep_alive(false),
-                          _cgi(NULL),
-                          is_cgi(false),
-                          last_active(std::time(0))
+    Client(int fd = -1)
+        : client_fd(fd),
+          _state(READING),
+          read_buffer(),
+          parser(),
+          write_buffer(),
+          write_pos(0),
+          is_keep_alive(false),
+          _cgi(NULL),
+          is_cgi(false),
+          last_activity_ms(0)
     {
         read_buffer.reserve(4096);
+        last_activity_ms = now_ms();
     }
-    void    reset();
+    void reset()
+    {
+        _state = READING;
+        read_buffer.clear();
+        write_buffer.clear();
+        write_pos = 0;
+        is_keep_alive = false;
+        parser.reset();
+        is_cgi = false;
+        last_activity_ms = now_ms();
+    }
 
     int get_fd()
     {
         return client_fd;
     }
-};
 
+    static unsigned long long now_ms()
+    {
+        struct timeval tv;
+        gettimeofday(&tv, 0);
+        return (unsigned long long)tv.tv_sec * 1000ULL + (unsigned long long)tv.tv_usec / 1000ULL;
+    }
+};
 
 class ClientManager
 {
@@ -104,7 +123,7 @@ public:
     {
         return _clients;
     }
-    std::map<int, Client*>  &get_all_cgi_clients()
+    std::map<int, Client *> &get_all_cgi_clients()
     {
         return _cgi_manager;
     }

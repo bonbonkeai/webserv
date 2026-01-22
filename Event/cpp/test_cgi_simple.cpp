@@ -160,3 +160,7 @@ int main(int ac, char **av)
  * lsof -i :端口号   检查端口是否被占用
  *   fuser -k 8080/tcp 清空端口号连接
  */
+<<<<<<< HEAD
+=======
+
+>>>>>>> main

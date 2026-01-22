@@ -4,11 +4,6 @@
 #include "HTTP/hpp/HTTPUtils.hpp"
 #include <sstream>
 
-bool UploadHandle::startsWith(const std::string& s, const std::string& prefix)
-{
-    return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
-}
-
 // bool UploadHandle::extractBoundary(const std::string& contentType, std::string& outBoundary)
 // {
 //     // ex: multipart/form-data; boundary=----WebKitFormBoundaryabc123
@@ -111,20 +106,79 @@ bool UploadHandle::extractBoundary(const std::string& contentType, std::string& 
 }
 
 
-static std::string getParamQuoted(const std::string& s, const std::string& key)
+// static std::string getParamQuoted(const std::string& s, const std::string& key)
+// {
+//     // 在 Content-Disposition 一行里找 key="..."
+//     // 返回引号内内容，不存在则 ""
+//     std::string needle = key + "=\"";
+//     std::size_t p = s.find(needle);
+//     if (p == std::string::npos)
+//         return ("");
+//     p += needle.size();
+//     std::size_t end = s.find('"', p);
+//     if (end == std::string::npos)
+//         return ("");
+//     return (s.substr(p, end - p));
+// }
+
+static std::string getParam(const std::string& s, const std::string& key)
 {
-    // 在 Content-Disposition 一行里找 key="..."
-    // 返回引号内内容，不存在则 ""
-    std::string needle = key + "=\"";
-    std::size_t p = s.find(needle);
-    if (p == std::string::npos)
-        return ("");
-    p += needle.size();
-    std::size_t end = s.find('"', p);
-    if (end == std::string::npos)
-        return ("");
-    return (s.substr(p, end - p));
+    // 支持： key="..." 以及 key=token（token 到 ; 或空白结束）
+    // 例如： form-data; name=file; filename=a.png
+    //      form-data; name="file"; filename="a.png"
+
+    std::size_t p = s.find(key);
+    while (p != std::string::npos)
+    {
+        // 确保命中的是独立的 key（避免 "xfilename" 之类误匹配）
+        if (p > 0)
+        {
+            char prev = s[p - 1];
+            if (std::isalnum((unsigned char)prev) || prev == '_' || prev == '-')
+            {
+                p = s.find(key, p + 1);
+                continue;
+            }
+        }
+        std::size_t i = p + key.size();
+        // 跳过 key 后空格
+        while (i < s.size() && (s[i] == ' ' || s[i] == '\t'))
+            ++i;
+        // 必须有 '='
+        if (i >= s.size() || s[i] != '=')
+        {
+            p = s.find(key, p + 1);
+            continue;
+        }
+        ++i;
+        // 跳过 '=' 后空格
+        while (i < s.size() && (s[i] == ' ' || s[i] == '\t'))
+            ++i;
+        if (i >= s.size())
+            return ("");
+        // 1) 引号形式
+        if (s[i] == '"')
+        {
+            ++i;
+            std::size_t endq = s.find('"', i);
+            if (endq == std::string::npos)
+                return ("");
+            return (s.substr(i, endq - i));
+        }
+        // 2) 非引号形式：读到 ';' 或空白结束
+        std::size_t end = i;
+        while (end < s.size())
+        {
+            char c = s[end];
+            if (c == ';' || c == ' ' || c == '\t' || c == '\r' || c == '\n')
+                break;
+            ++end;
+        }
+        return (s.substr(i, end - i));
+    }
+    return ("");
 }
+
 
 bool UploadHandle::parsePartHeaders(const std::string& headersBlock, std::string& outName, std::string& outFilename, std::string& outPartContentType)
 {
@@ -159,8 +213,11 @@ bool UploadHandle::parsePartHeaders(const std::string& headersBlock, std::string
         if (key == "content-disposition")
         {
             // val 例: form-data; name="file"; filename="a.png"
-            outName = getParamQuoted(val, "name");
-            outFilename = getParamQuoted(val, "filename");
+            // outName = getParamQuoted(val, "name");
+            // outFilename = getParamQuoted(val, "filename");
+            outName = getParam(val, "name");
+            outFilename = getParam(val, "filename");
+
         }
         else if (key == "content-type")
         {
@@ -195,6 +252,7 @@ std::string UploadHandle::sanitizeFilename(const std::string& filename)
     return (f);
 }
 
+
 std::string UploadHandle::buildSuccessHtml(const std::string& savedAs)
 {
     std::ostringstream oss;
@@ -204,6 +262,35 @@ std::string UploadHandle::buildSuccessHtml(const std::string& savedAs)
         << "<p>Saved as: " << savedAs << "</p>"
         << "</body></html>\n";
     return (oss.str());
+}
+
+std::size_t UploadHandle::findNextBoundaryLine(const std::string& body,
+                                        std::size_t from,
+                                        const std::string& delim,
+                                        bool& outIsFinal)
+{
+    // delim = "--" + boundary
+    std::string needle = "\r\n" + delim;
+    std::size_t p = from;
+    while (true)
+    {
+        std::size_t hit = body.find(needle, p);
+        if (hit == std::string::npos)
+            return std::string::npos;
+        std::size_t after = hit + needle.size(); // boundary 串之后的位置
+        outIsFinal = false;
+        // 合法情况 1：普通边界，后面必须是 \r\n
+        if (after + 2 <= body.size() && body.compare(after, 2, "\r\n") == 0)
+            return (hit);
+        // 合法情况 2：结束边界，后面必须是 --
+        if (after + 2 <= body.size() && body.compare(after, 2, "--") == 0)
+        {
+            outIsFinal = true;
+            return (hit);
+        }
+        // 命中但不合法，当作“内容中的巧合序列”，继续向后找
+        p = hit + 2;
+    }
 }
 
 bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& uploadDir, HTTPResponse& outResp)
@@ -218,19 +305,28 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
 
     const std::string& ct = req.headers.find("content-type")->second;
     // ps：ct 可能带大小写差异，MVP 用查找 "multipart/form-data"
-    if (ct.find("multipart/form-data") == std::string::npos)
+    // if (ct.find("multipart/form-data") == std::string::npos)
+    // {
+    //     outResp = buildErrorResponse(400);
+    //     outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+    //     return (false);
+    // }
+
+    //让大小写不敏感
+    if (FileUtils::mimeMainLower(ct) != "multipart/form-data")
     {
         outResp = buildErrorResponse(400);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (false);
     }
 
+
     std::string boundary;
     if (!extractBoundary(ct, boundary))
     {
         outResp = buildErrorResponse(400);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
-        return false;
+        return (false);
     }
 
     // multipart 的边界串在 body 里表现为：
@@ -242,12 +338,22 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
 
     // 2) 定位第一个 boundary
     std::size_t pos = body.find(delim);
-    if (pos == std::string::npos)
+    // if (pos == std::string::npos)
+    // {
+    //     outResp = buildErrorResponse(400);
+    //     outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+    //     return (false);
+    // }
+    if (pos != 0)
     {
-        outResp = buildErrorResponse(400);
-        outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
-        return (false);
+        if (pos < 2 || body.compare(pos - 2, 2, "\r\n") != 0)
+        {
+            outResp = buildErrorResponse(400);
+            outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+            return false;
+        }
     }
+
 
     // 3) 逐 part 扫描，找到第一个带 filename 的 part（MVP）
     //    你也可以扩展为多文件循环保存
@@ -285,14 +391,25 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
         pos = headerEnd + 4; // 跳过 \r\n\r\n
 
         // part data 直到下一个 \r\n--boundary
-        std::string nextNeedle = "\r\n" + delim;
-        std::size_t next = body.find(nextNeedle, pos);
+        // std::string nextNeedle = "\r\n" + delim;
+        // std::size_t next = body.find(nextNeedle, pos);
+        // if (next == std::string::npos)
+        // {
+        //     outResp = buildErrorResponse(400);
+        //     outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+        //     return (false);
+        // }
+
+        //文本内部可能也出现\r\n
+        bool isFinalLine = false;
+        std::size_t next = findNextBoundaryLine(body, pos, delim, isFinalLine);
         if (next == std::string::npos)
         {
             outResp = buildErrorResponse(400);
             outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
             return (false);
         }
+
 
         std::string partData = body.substr(pos, next - pos);
         pos = next + 2; // 让 pos 指向 "--boundary" 的开头（跳过前导 \r\n 的 \r\n）
@@ -326,7 +443,7 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
 
             saved = true;
             savedName = safe;
-            break; // MVP: 只保存第一个文件字段
+            break; //只保存第一个文件字段
         }
 
         // 找下一个 boundary（pos 当前指向 "--boundary..."）

@@ -13,4 +13,12 @@ bool isTokenUpperAlpha(const std::string& s);
 void rtrimSpaces(std::string& s);
 bool isTChar(unsigned char c);
 
+//增加的针对URI的parser
+bool uriCharset(char c);
+bool isValidUriChar(const std::string& s);
+bool isValidHostChar(char c);
+bool isValidDomainLike(const std::string& host);
+bool parsePort(const std::string& s, int& port_out);
+bool isValidIp(const std::string& host);
+
 #endif
