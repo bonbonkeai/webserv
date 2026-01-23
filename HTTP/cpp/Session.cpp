@@ -29,7 +29,6 @@ Session *Session_manager::get_session(const std::string &name, bool &is_new_sess
 {
     std::map<std::string, Session>::iterator    it = _cookies.find(name);
 
-    is_new_session = false;
     if (it != _cookies.end() && !it->second.is_expired())
     {
         it->second.update_acces();

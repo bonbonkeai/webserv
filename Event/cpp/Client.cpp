@@ -32,6 +32,24 @@
 #include <utility>
 #include <iterator>
 
+void Client::reset()
+{
+    _state = READING;
+    read_buffer.clear();
+    write_buffer.clear();
+    write_pos = 0;
+    is_keep_alive = false;
+    parser.reset();
+    is_cgi = false;
+    last_activity_ms = now_ms();
+    if (_cgi)
+    {
+        _cgi->reset();
+        delete _cgi;
+        _cgi = NULL;
+    }
+}
+
 ClientManager::ClientManager()
 {
 }
@@ -39,7 +57,12 @@ ClientManager::~ClientManager()
 {
     std::map<int, Client *>::const_iterator it;
     for (it = _clients.begin(); it != _clients.end(); ++it)
+    {
+        it->second->reset();
         delete it->second;
+    }
+    _clients.clear();
+    _cgi_manager.clear();
 }
 
 void ClientManager::add_socket_client(int fd)
@@ -95,14 +118,14 @@ void ClientManager::del_cgi_fd(int pipe_fd)
     std::map<int, Client *>::iterator it = _cgi_manager.find(pipe_fd);
     if (it == _cgi_manager.end())
         return;
-    Client* c = it->second;
+    Client *c = it->second;
     _cgi_manager.erase(it);
     if (!c || !c->_cgi)
     {
         close(pipe_fd); // 防御：至少关掉传进来的 fd
         return;
     }
-    CGI_Process* cgi = c->_cgi;
+    CGI_Process *cgi = c->_cgi;
     // 1) 关闭 CGI 的 pipe（只在这里做一次）
     // pipe_fd 应当等于 cgi->_read_fd，但防御一下
     if (cgi->_read_fd >= 0)
@@ -128,7 +151,6 @@ void ClientManager::del_cgi_fd(int pipe_fd)
     cgi->reset_no_kill();
 }
 
-
 // void    ClientManager::bind_cgi_fd(int pipe_fd, int client_fd)
 // {
 //     Client* c = _clients.at(client_fd);
@@ -140,11 +162,11 @@ void ClientManager::del_cgi_fd(int pipe_fd)
 // }
 void ClientManager::bind_cgi_fd(int pipe_fd, int client_fd)
 {
-    std::map<int, Client*>::iterator it = _clients.find(client_fd);
+    std::map<int, Client *>::iterator it = _clients.find(client_fd);
     if (it == _clients.end())
         return;
 
-    Client* c = it->second;
+    Client *c = it->second;
     if (!c)
         return;
 
@@ -155,4 +177,3 @@ void ClientManager::bind_cgi_fd(int pipe_fd, int client_fd)
     if (c->_cgi)
         c->_cgi->_read_fd = pipe_fd;
 }
-

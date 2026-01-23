@@ -9,7 +9,7 @@
 #include "HTTPRequest.hpp"
 #include "Event/hpp/Client.hpp"
 
-#define SESSION_TIMEOUT 300
+#define SESSION_TIMEOUT 5
 
 struct  Session
 {

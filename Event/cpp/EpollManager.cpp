@@ -6,7 +6,9 @@ Epoller::Epoller()
 
 Epoller::~Epoller()
 {
-    
+    if (epfd >= 0)
+        close(epfd);
+    _events.clear();
 }
 
 bool    Epoller::init(int max_size)

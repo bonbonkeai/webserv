@@ -53,13 +53,14 @@ public:
 
     HTTPResponse process_request(const HTTPRequest &req);
 
+    void    cleanup();
     // void process_request(Client &c);
 
 private:
     // class de tous les configuration de server
     int port_nbr;
     int socketfd;
-    Epoller _epoller;
+    Epoller* _epoller;
     ClientManager* _manager;
     Session_manager* _session_cookie;
 };

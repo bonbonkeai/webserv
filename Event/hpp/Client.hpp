@@ -22,7 +22,7 @@ HTTPRequestParser 实例
 keepAlive 状态
 lastActive 时间戳
 与 CGI 交互时的 cgiFd*/
-class CGI_Process;
+//class CGI_Process;
 
 enum Clientstate
 {
@@ -78,17 +78,7 @@ struct Client
         read_buffer.reserve(4096);
         last_activity_ms = now_ms();
     }
-    void reset()
-    {
-        _state = READING;
-        read_buffer.clear();
-        write_buffer.clear();
-        write_pos = 0;
-        is_keep_alive = false;
-        parser.reset();
-        is_cgi = false;
-        last_activity_ms = now_ms();
-    }
+    void    reset();
 
     int get_fd()
     {
