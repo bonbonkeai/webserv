@@ -2,4 +2,5 @@
 echo "Content-Type: text/plain"  
 echo ""                           
 echo "partial output"            
-sleep 100
+sleep 10
+echo "test"

@@ -97,7 +97,7 @@ void Server::process_request(Client &c)
         c._state = PROCESS;               // 输出通过 pipe 非阻塞写
                                           // _epoller.modif_event(c.client_fd, EPOLLOUT | EPOLLET);
         _epoller.add_event(c._cgi->_read_fd, EPOLLIN | EPOLLET);
-        _manager.bind_cgi_fd(c._cgi->_read_fd, c.client_fd);
+        _manager->bind_cgi_fd(c._cgi->_read_fd, c.client_fd);
     }
     else
     {

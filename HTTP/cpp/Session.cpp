@@ -25,7 +25,7 @@ std::string Session_manager::generate_id() const
  *  3. not find: create a new one 
  */
 
-Session *Session_manager::get_session(const std::string &name, bool is_new_session)
+Session *Session_manager::get_session(const std::string &name, bool &is_new_session)
 {
     std::map<std::string, Session>::iterator    it = _cookies.find(name);
 

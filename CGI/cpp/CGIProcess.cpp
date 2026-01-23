@@ -1,7 +1,9 @@
 #include "../hpp/CGIProcess.hpp"
 #include "Event/hpp/Client.hpp"
+#include <stdio.h>
 
-CGI_Process::CGI_Process() : _pid(-1), _read_fd(-1), _write_fd(-1), _output_buffer(), start_time_ms(0)
+CGI_Process::CGI_Process() : _pid(-1), _read_fd(-1), _write_fd(-1), _output_buffer(), start_time_ms(0),
+                             last_output_ms(0)
 {
 }
 
@@ -78,15 +80,9 @@ void CGI_Process::reset()
     }
     _output_buffer.clear();
     start_time_ms = 0;
+    last_output_ms = 0;
 }
-void CGI_Process::set_non_block_fd(int fd)
-{
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1)
-        throw std::runtime_error("fcntl get flags failed");
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
-        throw std::runtime_error("fcntl set flags failed");
-}
+
 void CGI_Process::append_output(const char *buf, size_t n)
 {
     _output_buffer.append(buf, n);
@@ -161,7 +157,7 @@ void CGI_Process::append_output(const char *buf, size_t n)
 //     start_time_ms = Client::now_ms();
 //     //
 //     // if (req.method == "POST" && req.has_body)
-//     // //write the content in the body 
+//     // //write the content in the body
 //     //     write(pipe_in[1], req.body.c_str(), req.body.size());
 //     // stdin：不要 non-block，确保 body 写满，否则 CGI 可能一直等
 //     if (req.method == "POST" && req.has_body && !req.body.empty())
@@ -188,7 +184,6 @@ void CGI_Process::append_output(const char *buf, size_t n)
 //     _write_fd = -1;
 //     return true;
 // }
-
 
 bool CGI_Process::execute(const std::string &script_path, HTTPRequest &req)
 {
@@ -225,21 +220,22 @@ bool CGI_Process::execute(const std::string &script_path, HTTPRequest &req)
     _read_fd = pipe_out[0];
     _write_fd = pipe_in[1];
     set_non_block_fd(_read_fd);
-    set_non_block_fd(_write_fd);
+    //set_non_block_fd(_write_fd);
 
     //
     start_time_ms = Client::now_ms();
+    last_output_ms = 0;
+    
     //
     if (req.method == "POST" && req.has_body)
         // write the content in the body
         write(pipe_in[1], req.body.c_str(), req.body.size());
     // stdin：不要 non-block，确保 body 写满，否则 CGI 可能一直等
-    
+
     close(_write_fd);
     _write_fd = -1;
     return true;
 }
-
 
 void CGI_Process::reset_no_kill()
 {
@@ -247,4 +243,14 @@ void CGI_Process::reset_no_kill()
     _output_buffer.clear();
     // 任何与 pid/fd 有关的都不要动
     start_time_ms = 0;
+    last_output_ms = 0;
+}
+
+void CGI_Process::set_non_block_fd(int fd)
+{
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1)
+        throw std::runtime_error("fcntl get flags failed");
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+        throw std::runtime_error("fcntl set flags failed");
 }

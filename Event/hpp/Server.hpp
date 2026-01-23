@@ -7,6 +7,7 @@
 #include "HTTP/hpp/ResponseBuilder.hpp"
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "HTTP/hpp/RequestFactory.hpp"
+#include "HTTP/hpp/Session.hpp"
 
 #include <iostream>
 #include <netinet/in.h>
@@ -16,11 +17,14 @@
 #include <unistd.h>
 #include <cerrno>
 #include <ctime>
+#include <string>
 
+struct  Client;
 class Epoller;
 class ResponseBuilder;
 class ClientManager;
 class HTTPResponse;
+class Session_manager;
 
 class Server
 {
@@ -34,7 +38,6 @@ public:
 
     void handle_pipe_error(int fd);
     void handle_socket_error(int fd);
-    void handle_error_event(int fd);
 
     void handle_cgi_read(Client &c, int pipe_fd);
     void handle_cgi_read_error(Client &c, int pipe_fd);
@@ -57,7 +60,8 @@ private:
     int port_nbr;
     int socketfd;
     Epoller _epoller;
-    ClientManager _manager;
+    ClientManager* _manager;
+    Session_manager* _session_cookie;
 };
 
 /*初始化 listen sockets (根据 ServerConfig)

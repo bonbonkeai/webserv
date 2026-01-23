@@ -3,7 +3,7 @@
 
 #include "../../HTTP/hpp/HTTPRequest.hpp"
 #include "../../HTTP/hpp/HTTPResponse.hpp"
-
+#include "Event/hpp/Server.hpp"
 
 #include <iostream>
 #include <vector>
@@ -17,6 +17,8 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <string>
+
+class   Server;
 
 struct Client;
 struct CGI_ENV
@@ -46,6 +48,7 @@ public:
     // time_t start_time;
 
     unsigned long long start_time_ms;
+    unsigned long long  last_output_ms;
 
     CGI_Process();
     ~CGI_Process();
@@ -55,8 +58,7 @@ public:
     bool execute(const std::string &script_path, HTTPRequest &req);
     void reset();
     void append_output(const char *buf, size_t n);
-    void set_non_block_fd(int fd);
-
+    void    set_non_block_fd(int fd);
     //del_cgi_fd()调用
     void reset_no_kill();
 };
