@@ -26,7 +26,8 @@ HTTPResponse DeleteRequest::handle()
     }
     if (FileUtils::isDirectory(fullPath))
     {
-        HTTPResponse r = buildErrorResponse(403);
+        HTTPResponse r = buildErrorResponse(405);
+        r.headers["allow"] = "GET"; // 覆盖 buildErrorResponse 的默认 allow->不然要改 buildErrorResponse的传参很麻烦
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }

@@ -158,7 +158,7 @@ std::string FileUtils::trimCopy(std::string s)
     return (s);
 }
 
- std::string FileUtils::mimeMainLower(const std::string& ct)
+std::string FileUtils::mimeMainLower(const std::string& ct)
 {
     std::size_t semi = ct.find(';');
     std::string main = (semi == std::string::npos) ? ct : ct.substr(0, semi);
