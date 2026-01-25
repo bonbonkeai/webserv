@@ -1,4 +1,3 @@
-
 #ifndef EPOLLMANAGER_HPP
 #define EPOLLMANAGER_HPP
 
@@ -6,6 +5,7 @@
 #include <exception>
 #include <iostream>
 #include <vector>
+#include <unistd.h>
 
 class   Epoller
 {

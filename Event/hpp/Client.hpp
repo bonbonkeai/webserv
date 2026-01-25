@@ -13,7 +13,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-class   CGI_Process;
+class CGI_Process;
 /*表示一个客户端连接：
 成员包括：
 readBuffer / writeBuffer
@@ -22,7 +22,7 @@ HTTPRequestParser 实例
 keepAlive 状态
 lastActive 时间戳
 与 CGI 交互时的 cgiFd*/
-class   CGI_Process;
+//class CGI_Process;
 
 enum Clientstate
 {
@@ -49,47 +49,40 @@ struct Client
     std::string write_buffer;
     size_t write_pos;
     bool is_keep_alive;
-    
+
     // cgi
-    CGI_Process*  _cgi;
-    bool    is_cgi;
+    CGI_Process *_cgi;
+    bool is_cgi;
 
-    Client(int fd = -1)
-    : client_fd(fd),
-      _state(READING),
-      read_buffer(),
-      parser(),
-      write_buffer(),
-      write_pos(0),
-      is_keep_alive(false),
-      _cgi(NULL),
-      is_cgi(false),
-      last_activity_ms(0)
-	{
-		read_buffer.reserve(4096);
-        last_activity_ms = now_ms();
-	}
-	void reset()
-	{
-		_state = READING;
-		read_buffer.clear();
-		write_buffer.clear();
-		write_pos = 0;
-		is_keep_alive = false;
-		parser.reset();
-        is_cgi = false;
-        last_activity_ms = now_ms(); 
-	}
-
-    int get_fd()
-    {
-        return client_fd;
-    }
-
+    // timeout
+    bool timeout;
+    time_t last_active;
     unsigned long long last_activity_ms;
     bool is_timeout(unsigned long long now_ms, unsigned long long timeout_ms) const
     {
         return (now_ms - last_activity_ms) > timeout_ms;
+    }
+
+    Client(int fd = -1)
+        : client_fd(fd),
+          _state(READING),
+          read_buffer(),
+          parser(),
+          write_buffer(),
+          write_pos(0),
+          is_keep_alive(false),
+          _cgi(NULL),
+          is_cgi(false),
+          last_activity_ms(0)
+    {
+        read_buffer.reserve(4096);
+        last_activity_ms = now_ms();
+    }
+    void    reset();
+
+    int get_fd()
+    {
+        return client_fd;
     }
 
     static unsigned long long now_ms()
@@ -106,15 +99,24 @@ public:
     ClientManager();
     ~ClientManager();
 
-    void add_client(int fd);
-    Client *get_client(int fd);
-    void remove_client(int fd);
+    void add_socket_client(int fd);
+    Client *get_socket_client_by_fd(int fd);
+    void remove_socket_client(int fd);
 
-    //gestion cgi client
-    Client* get_client_by_cgi_fd(int pipe_fd);
-    bool    is_cgi_pipe(int pipe_fd);
-    void    del_cgi_fd(int pipe_fd);
-    void    bind_cgi_fd(int pipe_fd, int client_fd);
+    // gestion cgi client
+    Client *get_client_by_cgi_fd(int pipe_fd);
+    bool is_cgi_pipe(int pipe_fd);
+    void del_cgi_fd(int pipe_fd);
+    void bind_cgi_fd(int pipe_fd, int client_fd);
+
+    std::map<int, Client *> &get_all_socket_clients()
+    {
+        return _clients;
+    }
+    std::map<int, Client *> &get_all_cgi_clients()
+    {
+        return _cgi_manager;
+    }
 
 private:
     std::map<int, Client *> _clients;     // socket_fd -> client*

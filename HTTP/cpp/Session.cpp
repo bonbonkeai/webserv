@@ -27,9 +27,9 @@ std::string Session_manager::generate_id() const
 
 Session *Session_manager::get_session(const std::string &name, bool is_new_session)
 {
+    (void)is_new_session;
     std::map<std::string, Session>::iterator    it = _cookies.find(name);
 
-    is_new_session = false;
     if (it != _cookies.end() && !it->second.is_expired())
     {
         it->second.update_acces();
@@ -38,7 +38,7 @@ Session *Session_manager::get_session(const std::string &name, bool is_new_sessi
     if (it != _cookies.end() && it->second.is_expired())
         _cookies.erase(it);
     
-    //create a new one ;
+    //create a new one ; is_new_session = true;
     std::string id = generate_id();
     Session s(id);
     _cookies[s._id] = s;

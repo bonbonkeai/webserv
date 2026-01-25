@@ -85,7 +85,8 @@ bool isValidDomainLike(const std::string& host)
         return (true);
 
     // 每个字符必须合法，且不能以 '-' 开头结尾
-    if (host.front() == '-' || host.back() == '-')
+    // if (host.front() == '-' || host.back() == '-')
+    if (host[0] == '-' || host[host.size() - 1] == '-')
         return (false);
 
     for (size_t i = 0; i < host.size(); ++i)

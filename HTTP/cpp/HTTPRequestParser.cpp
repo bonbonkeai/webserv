@@ -258,10 +258,14 @@ bool	HTTPRequestParser::parseRequestLine()
     }
     // origin-form must begin with '/'
     if (_req.uri.empty() || _req.uri[0] != '/')
+    {
         return (fail(400));
+    }
     // block '..' => 403
     if (_req.uri.find("..") != std::string::npos)
+    {
         return (fail(403));
+    }
 	_req.keep_alive = true;
 	splitUri();
     _chunk_waiting_size = true;
