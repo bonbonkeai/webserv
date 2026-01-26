@@ -9,6 +9,7 @@ static std::string reasonPhrase(int code)
         case 404: return ("Not Found");
         case 405: return ("Method Not Allowed");
         case 408: return ("Request Timeout");//读请求超时（通常在 socket 层计时，不在 parser）
+        case 411: return ("Length Required");//服务器要求该请求必须明确给出消息体长度，但客户端没有提供。
         case 413: return ("Payload Too Large");//body 太大超出
         case 414: return ("URI Too Long");//uri 太长
         case 415: return ("Unsupported Media Type");//上传但 content-type 不支持（业务层）

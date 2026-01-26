@@ -31,12 +31,23 @@ HTTPResponse DeleteRequest::handle()
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
-    if (!FileUtils::removeFile(fullPath))
+    // if (!FileUtils::removeFile(fullPath))
+    // {
+    //     HTTPResponse r = buildErrorResponse(500);
+    //     r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+    //     return (r);
+    // }
+    int e = 0;
+    if (!FileUtils::removeFileErrno(fullPath, e))
     {
-        HTTPResponse r = buildErrorResponse(500);
+        int code = 500;
+        if (e == ENOENT) code = 404;
+        else if (e == EACCES || e == EPERM) code = 403;
+        HTTPResponse r = buildErrorResponse(code);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
+
     HTTPResponse resp;
     resp.statusCode = 200;
     resp.statusText = "OK";

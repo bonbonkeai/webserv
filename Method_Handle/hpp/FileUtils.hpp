@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <fstream>
 #include <cstdio>
+#include <errno.h>
 
 class FileUtils
 {
@@ -22,7 +23,12 @@ public:
                         std::string& out,
                         int& outErrno);
 
+        static bool ensureDirRecursive(const std::string& dir, int mode);
+        static bool writeAllBinaryErrno(const std::string& path, const std::string& data, int& outErrno);
         static bool writeAllBinary(const std::string& path, const std::string& data);
+        
+        static bool removeFileErrno(const std::string& path, int& outErrno);
+
         static bool removeFile(const std::string& path);
         static std::string guessContentType(const std::string& path);
         static bool startsWith(const std::string& s, const std::string& prefix);
@@ -32,6 +38,9 @@ public:
         
         static std::string trimCopy(std::string s);
         static std::string mimeMainLower(const std::string& ct);
+
+        
+
 };
 
 #endif

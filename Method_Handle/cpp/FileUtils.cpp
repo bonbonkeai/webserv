@@ -85,13 +85,104 @@ bool FileUtils::readAll(const std::string& path, std::string& out, int& outErrno
     return (true);
 }
 
-bool FileUtils::writeAllBinary(const std::string& path, const std::string& data)
+// mkdir -p：支持 "./www/upload"、"www/upload"、"/tmp/x/y"
+bool FileUtils::ensureDirRecursive(const std::string& dir, int mode)
 {
+    if (dir.empty())
+        return (false);
+    if (isDirectory(dir))
+        return (true);
+
+    std::string cur;
+    cur.reserve(dir.size());
+
+    for (std::size_t i = 0; i < dir.size(); ++i)
+    {
+        char c = dir[i];
+        cur.push_back(c);
+
+        if (c == '/')
+        {
+            // 忽略根 "/" 或 "./"
+            if (cur == "/" || cur == "./")
+                continue;
+
+            if (!isDirectory(cur))
+            {
+                if (::mkdir(cur.c_str(), mode) != 0 && errno != EEXIST)
+                    return (false);
+            }
+        }
+    }
+    // 最后一段如果不以 '/' 结尾，还需要 mkdir
+    if (!isDirectory(cur))
+    {
+        if (::mkdir(cur.c_str(), mode) != 0 && errno != EEXIST)
+            return (false);
+    }
+    return (isDirectory(dir));
+}
+
+static std::string parentDirOf(const std::string& path)
+{
+    std::size_t slash = path.find_last_of('/');
+    if (slash == std::string::npos)
+        return ("");
+    if (slash == 0)
+        return ("/");
+    return (path.substr(0, slash));
+}
+
+bool FileUtils::writeAllBinaryErrno(const std::string& path, const std::string& data, int& outErrno)
+{
+    outErrno = 0;
+
+    // 1) 确保父目录存在（ofstream 不会创建目录）
+    std::string dir = parentDirOf(path);
+    if (!dir.empty())
+    {
+        if (!ensureDirRecursive(dir, 0755))
+        {
+            outErrno = errno ? errno : ENOENT;
+            return (false);
+        }
+    }
+
+    // 2) 写文件
     std::ofstream ofs(path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
     if (!ofs.is_open())
+    {
+        outErrno = errno ? errno : EACCES;
         return (false);
-    ofs.write(data.data(), (std::streamsize)data.size());
-    return (ofs.good());
+    }
+    if (!data.empty())
+        ofs.write(data.data(), (std::streamsize)data.size());
+    if (!ofs.good())
+    {
+        outErrno = errno ? errno : EIO;
+        return (false);
+    }
+    return (true);
+}
+
+bool FileUtils::writeAllBinary(const std::string& path, const std::string& data)
+{
+    // std::ofstream ofs(path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+    // if (!ofs.is_open())
+    //     return (false);
+    // ofs.write(data.data(), (std::streamsize)data.size());
+    // return (ofs.good());
+    int e = 0;
+    return (FileUtils::writeAllBinaryErrno(path, data, e));
+}
+
+bool FileUtils::removeFileErrno(const std::string& path, int& outErrno)
+{
+    outErrno = 0;
+    if (::remove(path.c_str()) == 0)
+        return (true);
+    outErrno = errno;
+    return (false);
 }
 
 bool FileUtils::removeFile(const std::string& path)

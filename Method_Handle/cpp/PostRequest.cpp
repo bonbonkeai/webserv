@@ -40,7 +40,7 @@ POST /upload/<file> multipart → 404
 
 HTTPResponse PostRequest::handleRawUploadFallback()
 {
-    const std::string UPLOAD_DIR = "./upload";
+    const std::string UPLOAD_DIR = "./www/upload";
 
     if (!FileUtils::isSafePath(_req.path))
     {
@@ -82,9 +82,19 @@ HTTPResponse PostRequest::handleRawUploadFallback()
     if (!fullPath.empty() && fullPath[fullPath.size() - 1] != '/')
         fullPath += "/";
     fullPath += filename;
-    if (!FileUtils::writeAllBinary(fullPath, _req.body))
+    // if (!FileUtils::writeAllBinary(fullPath, _req.body))
+    // {
+    //     HTTPResponse r = buildErrorResponse(500);
+    //     r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+    //     return (r);
+    // }
+    int e = 0;
+    if (!FileUtils::writeAllBinaryErrno(fullPath, _req.body, e))
     {
-        HTTPResponse r = buildErrorResponse(500);
+        int code = 500;
+        if (e == EACCES || e == EPERM)
+            code = 403;
+        HTTPResponse r = buildErrorResponse(code);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
@@ -121,7 +131,7 @@ HTTPResponse PostRequest::handle()
             return (r);
         }
         HTTPResponse resp;
-        const std::string UPLOAD_DIR = "./upload";
+        const std::string UPLOAD_DIR = "./www/upload";
         if (UploadHandle::handleMultipart(_req, UPLOAD_DIR, resp))
             return (resp);
         return (resp); // 错误已填充
@@ -129,7 +139,7 @@ HTTPResponse PostRequest::handle()
     // ---------- case 2：multipart 但不是 /upload ----------
     if (isMultipart)
     {
-        HTTPResponse r = buildErrorResponse(404);
+        HTTPResponse r = buildErrorResponse(415);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }

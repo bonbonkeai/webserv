@@ -434,13 +434,22 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
             path += safe;
 
             // 写文件
-            if (!FileUtils::writeAllBinary(path, partData))
+            // if (!FileUtils::writeAllBinary(path, partData))
+            // {
+            //     outResp = buildErrorResponse(500);
+            //     outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+            //     return (false);
+            // }
+            int e = 0;
+            if (!FileUtils::writeAllBinaryErrno(path, partData, e))
             {
-                outResp = buildErrorResponse(500);
+                int code = 500;
+                if (e == EACCES || e == EPERM)
+                    code = 403;
+                outResp = buildErrorResponse(code);
                 outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
                 return (false);
             }
-
             saved = true;
             savedName = safe;
             break; //只保存第一个文件字段

@@ -116,7 +116,7 @@ success
 printf 'GE T / HTTP/1.1\r\nHost: example.local\r\n\r\n' | nc -v $HOST $PORT
 ***************
 failed
-500 != 400
+505 != 400
 request-line token 数不对 → 400
 token 数对但 version != HTTP/1.1 → 505
 先做“语法完整性”，再做“版本支持性”
@@ -150,9 +150,9 @@ success
 ***************
 
 2）Host 带端口（合法）
-printf 'GET /hello.txt HTTP/1.1\r\nHost: localhost:%s\r\n\r\n' "$PORT" \
+printf 'GET /www/upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\n\r\n' "$PORT" \
 | nc -v $HOST $PORT | sed -n '1,30p'
-curl -v "http://$HOST:$PORT/hello.txt" -H "Host: localhost:$PORT" --http1.1
+curl -v "http://$HOST:$PORT/www/upload/hello.txt" -H "Host: localhost:$PORT" --http1.1
 Host with port accepted
 	•	Host: localhost:8080
 验证点：
@@ -212,24 +212,20 @@ success
 
 
 7）同一行多个 Host（逗号分隔）应当拒绝
-printf 'GET /hello.txt HTTP/1.1\r\nHost: a, b\r\n\r\n' \
+printf 'GET www/upload/hello.txt HTTP/1.1\r\nHost: a, b\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,30p'
 期望：400（更安全）
 ***************
-failed
-404 + 408 != 400
-timeout + keep_alive
+success
 ***************
 
 
 8）IPv6 Host 带端口
-printf 'GET /hello.txt HTTP/1.1\r\nHost: [::1]:%s\r\n\r\n' "$PORT" \
+printf 'GET www/upload/hello.txt HTTP/1.1\r\nHost: [::1]:%s\r\n\r\n' "$PORT" \
 | nc -v $HOST $PORT | sed -n '1,30p'
 不支持 IPv6，要保证“不崩”，返回 400。
 ***************
-failed
-404 + 408 != 400
-timeout + keep_alive
+success
 ***************
 
 
@@ -406,8 +402,6 @@ printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: clo
 failed
 404+408
 ***************
-
-
 
 
 
@@ -666,7 +660,9 @@ cat upload/chunk1.txt | sed -n '1,5p'
 文件存在
 内容严格等于 hello world
 ***************
-
+ATTENT
+success 201 + hello world
+mais 408
 ***************
 
 更严格一点（防止末尾多了换行）：
@@ -678,7 +674,7 @@ print(data)
 print("[OK]" if data==b"hello world" else "[FAIL] unexpected content")
 PY
 ***************
-
+success
 ***************
 
 8）chunk size 大小写十六进制
@@ -686,22 +682,42 @@ printf 'POST /upload/chunk_hex.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encod
 | nc -v $HOST $PORT | sed -n '1,80p'
 期望：201，文件内容为 0123456789
 ***************
-
+ATTENT
+success 201 + 0123456789
+mais 408
 ***************
 
-9）chunk extension（允许 5;ext=1 这种形式，如果选择支持）
-如果不支持，可以 400，但必须稳定不崩：
+9）chunk extension（允许 5;ext=1 这种形式，支持）
 printf 'POST /upload/chunk_ext.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5;ext=1\r\nhello\r\n0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,80p'
 ***************
-
+ATTENT
+success 201
+mais 408
 ***************
 
 10）chunked 缺少结尾 0\r\n\r\n
 printf 'POST /upload/chunk_incomplete.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-
+ATTENT
+success ici 408 ok
+发现缺少终止块 0\r\n\r\n
+超时 → 408
+***************
+正确结束的 chunked（应该不超时）:
+printf 'POST /upload/chunk_ok.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n' \
+| nc -v $HOST $PORT | sed -n '1,60p'
+***************
+ATTENT
+success 201 
+mais 408
+***************
+非法 chunk size（应该立刻 400，而不是等超时）:
+printf 'POST /upload/chunk_badsize.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZZ\r\nhello\r\n0\r\n\r\n' \
+| nc -v $HOST $PORT | sed -n '1,60p'
+***************
+success
 ***************
 
 11）重复/冲突的 Transfer-Encoding token
@@ -709,16 +725,22 @@ Transfer-Encoding: gzip, chunked（含 chunked 应当允许还是拒绝？要固
 Transfer-Encoding: chunked, gzip（chunked 不是最后一个通常不合法，很多实现会拒绝）
 printf 'POST /upload/te_mix.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: gzip, chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,60p'
-只要含 chunked 就接受-》应成功并落盘；如果选择严格 RFC，可能 400/501，但必须稳定。
+只要含 chunked 就接受-》应成功并落盘；如果选择严格 RFC，可能 501，但必须稳定。
 ***************
-
+failed 
+201 + 408
+现在 gzip, chunked 却被当作 chunked 接受并成功上传了，判定逻辑是
+“只要包含 chunked 就当作 chunked”
+而没有要求 “除了 chunked 以外不能出现未知/不支持编码”
+若列表里出现任何非 chunked 的 token（如 gzip、compress），应当拒绝
+最保守实现是 501 Not Implemented
 ***************
 
 12）Content-Length 非数字 / 负数 / 前导空格
 printf 'POST /upload/cl_nondigit.txt HTTP/1.1\r\nHost: localhost\r\nContent-Length: abc\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-
+success
 ***************
 
 
@@ -762,12 +784,8 @@ s.close()
 PY
 
 期望
-服务器响应不是 400/411/413（按你们 upload 逻辑通常 201）
+服务器响应不是 400/411/413（按你们 upload  201）
 文件落盘（下面检查内容）
-***************
-
-***************
-
 
 验证文件内容确实拼接正确：
 test -f upload/inc_fixed.txt && echo "[OK] inc_fixed exists" || echo "[FAIL] inc_fixed missing"
@@ -779,7 +797,18 @@ print(data)
 print("[OK]" if data==b"hello world!" else "[FAIL] unexpected content")
 PY
 ***************
-
+ATTENT
+success hello world
+MAIS:
+hello world!（12 字节），但声明了 11.
+多出来的那个 ! 在协议层面并不会凭空消失，它会留在同一 TCP 连接的接收缓冲里。
+这次用了 Connection: close，因此正确行为应该是
+服务器读满 11 字节后完成请求
+由于 connection close，服务器在响应后关闭连接
+连接关闭会丢弃任何未消费字节，不会进入下一请求解析.
+但如果在 keep-alive 场景下（或者客户端在同一连接上继续发第二个请求），多余的 ! 可能会被当作下一条请求的起始字节,下一请求会解析异常（400）
+或产生非常诡异的状态机行为
+所以:当收到的 body 字节数超过 Content-Length 时，连接必须关闭，不能 keep-alive 继续复用。
 ***************
 
 
@@ -800,7 +829,9 @@ print(d)
 print("[OK]" if d==b"hello" else "[FAIL]")
 PY
 ***************
-
+ATTENT
+success 201
+mais 408
 ***************
 
 
@@ -851,7 +882,7 @@ PY
 //短时间内不回任何响应（等待更多数据），且不把它判成 bad_request。
 
 ***************
-
+success
 ***************
 
 
@@ -886,7 +917,7 @@ PY
 
 期望：短时间内无响应（等待 CRLF），不应立即返回 400。
 ***************
-
+success
 ***************
 
 
@@ -895,19 +926,22 @@ printf 'POST /upload/raw4.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: 
 | nc 127.0.0.1 $PORT | sed -n '1,40p'
 预期：400
 ***************
-
+success
 ***************
 
 
 6）chunk size 与数据不匹配
-# 少给：声明 5 只给 4 -> 应等待更多（complet=false）
+# 少给：声明 5 只给 4 -> 应等待更多（complet=false, 408->代表“请求没发完”）
 printf 'POST /upload/chunk_short.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhell\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
+***************
+success
+***************
 # 多给：声明 5 给 6 -> 通常应 400（因为后续 framing 被破坏）
 printf 'POST /upload/chunk_long.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloo\r\n0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,60p'
 ***************
-
+success
 ***************
 
 
@@ -915,7 +949,7 @@ printf 'POST /upload/chunk_long.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Enco
 printf 'POST /upload/chunk_nocrlf.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,60p'
 ***************
-
+success
 ***************
 
 
@@ -935,6 +969,16 @@ hello = 5
 \r\n = 2
 world = 5
 → 总长度 = 12 = 0xC
+printf 'POST /upload/chunk_crlf.txt HTTP/1.1\r\n\
+Host: localhost\r\n\
+Transfer-Encoding: chunked\r\n\
+\r\n\
+c\r\n\
+hello\r\nworld\r\n\
+0\r\n\r\n' \
+| nc -v $HOST $PORT | sed -n '1,60p'
+
+
 printf 'POST /upload/chunk_crlf.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nC\r\nhello\r\nworld\r\n0\r\n\r\n' \
 | nc -v 127.0.0.1 $PORT | sed -n '1,80p'
 期望
@@ -952,7 +996,13 @@ print(repr(data))
 print("[OK]" if data==b"hello\r\nworld" else "[FAIL]")
 PY
 ***************
-
+failed
+单个 chunk 内含 CRLF:
+当前的 chunked 解析是基于“按行读取到 CRLF”，那它在面对二进制数据（含 CRLF）时天然不完备。正确实现必须是：
+先解析 size 行（到 CRLF 为止）
+然后进入“按字节计数读取 data”的状态，读满 N 字节，不管中间出现什么
+读完 N 字节后再严格要求接下来两个字节必须是 CRLF
+再进入下一块 size 解析
 ***************
 
 
@@ -974,7 +1024,11 @@ print(repr(data))
 print("[OK]" if data==b"a\r\nbc\r\nd" else "[FAIL]")
 PY
 ***************
+ATTENT
+success 201 
+mais 408
 
+ps:之前 chunk_crlf.txt 失败，更可能是那条构造触发了解析器的某个边界分支（例如 buffer 切分、用 shell 的 \ 换行导致实际发送内容与预期不一致、或那条把 data 与结束符排布得让解析器误判）
 ***************
 
 
@@ -1003,7 +1057,9 @@ expected=b"5\r\nhello\r\n0\r\n\r\n"
 print("[OK]" if data==expected else "[FAIL]")
 PY
 ***************
-
+ATTENT
+success 201 
+mais 408
 ***************
 
 
@@ -1020,14 +1076,14 @@ curl -v -X PUT "$BASE/" -H "Host: localhost" --http1.1
 Allow: GET, POST, DELETE（顺序不重要，但集合要对）
 还有 Connection: close 或 keep-alive
 ***************
-
+success
 ***************
 
 用 nc 直接看响应头：
 printf 'PUT / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,80p'
 ***************
-
+success
 ***************
 
 2）ResponseBuilder 自动Content-Length
@@ -1045,7 +1101,7 @@ wc -c < /tmp/body.bin
 content-length: N
 wc -c 输出也为 N
 ***************
-
+success
 ***************
 
 404 错误页：ErrorResponse 也必须有正确 Content-Length
@@ -1055,7 +1111,7 @@ wc -c < /tmp/body404.bin
 期望
 两者一致。
 ***************
-
+success
 ***************
 
 405 错误页：同时验证 Allow + Content-Length
@@ -1066,30 +1122,30 @@ echo "Content-Length vs body:"
 grep -i '^content-length:' /tmp/hdr405.txt
 wc -c < /tmp/body405.bin
 ***************
-
+success
 ***************
 
 用 nc 检查 “如果没有 Content-Length 是否会 hang”：
-printf 'GET /hello_len.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' \
+printf 'GET /hello.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 //有 Content-Length 或者 Transfer-Encoding: chunked
 不应出现“响应头发了但 body 永远不结束”的情况
 ***************
-
+success
 ***************
 
 3）空 body 响应是否给 Content-Length: 0
 # 示例：DELETE 成功但不返回 body 的话
-curl -v -X DELETE "$BASE/somefile" -H "Host: localhost" --http1.1
+curl -v -X DELETE "$BASE/upload/nope.txt" -H "Host: localhost" --http1.1
 ***************
-
+success
 ***************
 
 4）错误响应是否也设置正确的 Content-Type
 固定：text/plain 或 text/html
-curl -isS --http1.1 "$BASE/nope.txt" -H "Host: localhost" | sed -n '1,20p'
+curl -isS --http1.1 "$BASE/hello.txt" -H "Host: localhost" | sed -n '1,20p'
 ***************
-
+success
 ***************
 
 
@@ -1121,7 +1177,7 @@ Connection: close
 
 HELLO
 ***************
-
+success
 ***************
 
 curl -isS --http1.1 "$BASE/hello.txt" | sed -n '1,20p'
@@ -1132,7 +1188,7 @@ Content-Type 合理（例如 text/plain）
 Content-Length: 6（因为 HELLO\n 6 字节）
 Connection
 ***************
-
+success
 ***************
 
 “长度一致”核对：
@@ -1140,7 +1196,7 @@ curl -sS --http1.1 -D /tmp/h.txt "$BASE/hello.txt" -o /tmp/b.bin
 grep -i '^content-length:' /tmp/h.txt
 wc -c < /tmp/b.bin
 ***************
-
+success
 ***************
 
 2）测试不存在文件（404）
@@ -1150,7 +1206,7 @@ curl -i http://127.0.0.1:8080/nope.txt
 HTTP/1.1 404 Not Found
 有 Content-Length 或者 Transfer-Encoding: chunked（二选一），避免客户端卡住
 ***************
-
+success
 ***************
 
 3）第三步：测试目录 + index / autoindex
@@ -1170,7 +1226,7 @@ curl -i http://127.0.0.1:8080/dir/
 * DirectoryHandle::generateAutoIndexHtml
 * GetRequest 的目录分支
 ***************
-
+success
 ***************
 
 4）测试目录有 index.html
@@ -1190,7 +1246,7 @@ body 是 <h1>INDEX</h1>
 * DirectoryHandle::resolveIndex
 * StaticHandle::serveFile
 ***************
-
+success
 ***************
 
 5）PORT=8080
@@ -1205,25 +1261,35 @@ curl -is --http1.1 http://127.0.0.1:$PORT/emptydir/ | sed -n '1,30p'
 	•	content-length 与 content-type 是否存在且合理
 	•	connection: keep-alive 是否一致
 ***************
-
+success
 ***************
 
-6）GET 目录但不带尾斜杠 /dir
-curl -iS --http1.1 "$BASE/dir" | sed -n '1,30p'
-301/308 到 /dir/（较接近常见服务器行为）
-或直接按文件路径处理并 404
+6）GET 目录但不带尾斜杠 /dir, 是否重定向到 /dir/:
+curl -isS --http1.1 "$BASE/dir" | sed -n '1,20p'
+***************
+ATTENT 200
+当路径对应一个目录且 URL 不以 / 结尾时，返回 301（或 302）并设置 Location: /dir/
+然后由客户端再请求 /dir/
+:
+当请求的是目录但 URL 末尾缺 /
+会重定向到带 / 的 canonical URL
+原因是：相对路径解析。如果页面里有相对链接，例如：
+<img src="a.png">
+在 /dir/ 下会解析成 /dir/a.png
+在 /dir 下会解析成 /a.png（因为最后一段被当作文件名）
+这会导致资源引用错位。这也是评测可能检查重定向的原因。
 ***************
 
-***************
-
-7）GET 的 Range 请求
+7）GET 的 Range 请求(目前 没有实现 Range 语义)
 curl -isS --http1.1 "$BASE/hello.txt" -H "Host: localhost" -H "Range: bytes=0-2" | sed -n '1,30p'
-206（支持）
-或 200（忽略 Range）
-或 416/400（拒绝）
-
+206（支持）->200（忽略 Range）
 ***************
-
+ATTENT
+对 Range: bytes=0-2，正确的核心变化是：
+状态码：206 Partial Content
+必须包含：Content-Range: bytes 0-2/<full_length>
+Content-Length 变成 3
+body 只返回对应片段
 ***************
 
 
@@ -1244,39 +1310,42 @@ HTTP/1.1 201 Created
 Uploaded
 
 然后检查：
-cat upload/test.txt
+cat www/upload/test.txt
 内容应为：
 
 HELLO
 ***************
-
+success
 ***************
 
 curl -is --http1.1 -X POST --data-binary @www/hello.txt http://127.0.0.1:$PORT/upload/raw2.txt | sed -n '1,40p'
-test -f upload/raw2.txt && echo "[OK] raw2 exists" || echo "[FAIL] raw2 missing"
+test -f www/upload/raw2.txt && echo "[OK] raw2 exists" || echo "[FAIL] raw2 missing"
 重点：
 	•	201 Created
 	•	文件确实落盘
+***************
+success
+***************
 
 curl -isS --http1.1 -X POST --data-binary @www/hello.txt "$BASE/upload/test.txt" | sed -n '1,40p'
 检查：
-test -f upload/test.txt && echo "[OK] test.txt exists" || echo "[FAIL] test.txt missing"
+test -f www/upload/test.txt && echo "[OK] test.txt exists" || echo "[FAIL] test.txt missing"
 python3 - <<'PY'
-p="upload/test.txt"
+p="www/upload/test.txt"
 with open(p,"rb") as f: d=f.read()
 print(repr(d))
 print("[OK]" if d==b"HELLO\n" else "[FAIL] unexpected content")
 PY
 ***************
-
+success
 ***************
 
 3）错误路径测试（应该失败）
 curl -i -X POST --data "abc" http://127.0.0.1:8080/foo.txt
 期望：
-403 或 400
+404
 ***************
-
+success
 ***************
 
 4）测试 multipart/form-data 上传
@@ -1292,22 +1361,23 @@ body 是一段 HTML，显示：
 
 Saved as: hello.txt
 并且：
-
-ls upload/
 能看到 hello.txt
 ***************
-
+success
 ***************
 
 curl -isS --http1.1 -F "file=@www/hello.txt" "$BASE/upload" | sed -n '1,80p'
 检查：
-test -f upload/hello.txt && echo "[OK] hello.txt exists" || echo "[FAIL] hello.txt missing"
+test -f www/upload/hello.txt && echo "[OK] hello.txt exists" || echo "[FAIL] hello.txt missing"
 python3 - <<'PY'
-p="upload/hello.txt"
+p="www/upload/hello.txt"
 with open(p,"rb") as f: d=f.read()
 print(repr(d))
 print("[OK]" if d==b"HELLO\n" else "[FAIL]")
 PY
+***************
+success
+***************
 
 响应体检查：
 curl -sS --http1.1 -F "file=@www/hello.txt" "$BASE/upload" | grep -E "Saved as:|Upload OK|hello\.txt" -n \
@@ -1315,18 +1385,18 @@ curl -sS --http1.1 -F "file=@www/hello.txt" "$BASE/upload" | grep -E "Saved as:|
   || echo "[WARN] response text mismatch (check your template)"
 
 ***************
-
+success
 ***************
 
 POST multipart upload（/upload endpoint）
 curl -is --http1.1 -F "file=@www/hello.txt" http://127.0.0.1:$PORT/upload | sed -n '1,60p'
-test -f upload/hello.txt && echo "[OK] hello.txt exists" || echo "[FAIL] hello.txt missing"
+test -f www/upload/hello.txt && echo "[OK] hello.txt exists" || echo "[FAIL] hello.txt missing"
 重点：
 	•	201 Created
 	•	HTML body 有 “Upload OK”
 	•	文件名解析正确
 ***************
-
+success
 ***************
 
 -》multipart 但路径错误
@@ -1334,10 +1404,9 @@ curl -i -F "file=@www/hello.txt" \
 http://127.0.0.1:8080/upload/hello.txt
 期望：
 
-HTTP/1.1 403 Forbidden
-验证实现的 multipart 路由一致性策略
+HTTP/1.1 415//不支持 multipart 到这个 endpointt 路由一致性策略
 ***************
-
+success
 ***************
 
 -》POST /upload 但不是 multipart（415）
@@ -1347,26 +1416,26 @@ http://127.0.0.1:8080/upload
 
 HTTP/1.1 415 Unsupported Media Type
 ***************
-
+success
 ***************
 
 curl -is --http1.1 -X POST --data "abc" http://127.0.0.1:$PORT/upload | sed -n '1,30p'
 重点：
 	•	415 Unsupported Media Type
 ***************
-
+success
 ***************
 
 5）没有 CL、没有 TE 的 POST -> 411
 printf "POST / HTTP/1.1\r\nHost: x\r\n\r\n" | nc 127.0.0.1 8080
 期望：response status 是 411
 ***************
-
+success
 ***************
 
 printf "POST / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n" | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-
+success
 ***************
 
 
@@ -1374,6 +1443,12 @@ printf "POST / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n" | nc -v $HOST $
 
 
 4.3 DELETE
+//
+目录（存在但只读）→ 405 + Allow
+普通路径不存在 → 404
+upload 路径不存在 → 404
+//
+
 mkdir -p www www/dir
 printf "HELLO\n" > www/hello.txt
 touch www/dir/a.txt
@@ -1388,21 +1463,21 @@ Deleted
 ls www/hello.txt
 文件不存在。
 ***************
-
+success
 ***************
 
 # 删除存在文件（200，但是很多实现会用204 No Content）
-cp www/hello.txt www/todel.txt
+cp www/upload/raw.txt www/todel.txt
 curl -is --http1.1 -X DELETE http://127.0.0.1:$PORT/todel.txt | sed -n '1,30p'
 test ! -f www/todel.txt && echo "[OK] deleted" || echo "[FAIL] still exists"
 ***************
-
+success
 ***************
 
 2）删除不存在（404）
 curl -is --http1.1 -X DELETE http://127.0.0.1:$PORT/no_such_file.txt | sed -n '1,30p'
 ***************
-
+success
 ***************
 
 3）删除目录（应被拒绝）
@@ -1410,48 +1485,66 @@ curl -i -X DELETE http://127.0.0.1:8080/dir/
 期望：
 HTTP/1.1 405
 ***************
-
+success
 ***************
 
 删除目录（返回 405-》有权删或无权删）
 curl -is --http1.1 -X DELETE http://127.0.0.1:$PORT/dir/ | sed -n '1,30p'
 ***************
-
+success
 ***************
 
 DELETE /dir/（带尾斜杠）
 curl -isS --http1.1 -X DELETE "$BASE/dir/" | sed -n '1,50p'
 ***************
-
+success
 ***************
 
 DELETE /dir（不带尾斜杠，很多服务器会 301 到 /dir/）
 curl -isS --http1.1 -X DELETE "$BASE/dir" | sed -n '1,50p'
 ***************
+ATTENT
+//HTTP/1.1 405 Method Not Allowed
+allow: GET
+connection: keep-alive
+content-length: 23
+content-type: text/plain; charset=utf-8
 
+405 Method Not Allowed//
 ***************
 
 //403 Forbidden：“目录不可删或无权限删”
 405 Method Not Allowed：语义是“该资源类型/路由不允许 DELETE”，并且 应包含 Allow
 
-4）DELETE 没权限的文件（权限测试）
-cp www/hello.txt www/noperm.txt
-chmod 000 www/noperm.txt
-curl -isS --http1.1 -X DELETE "$BASE/noperm.txt" | sed -n '1,40p'
-chmod 644 www/noperm.txt 2>/dev/null || true
-rm -f www/noperm.txt
+4）DELETE 没权限的文件（权限测试）403
+# 准备文件
+echo hi > www/upload/protect2.txt
+# 去掉目录写权限（对 owner）
+chmod u-w www/upload
+# 尝试删除
+curl -isS --http1.1 -X DELETE "$BASE/upload/protect2.txt" -H "Host: localhost" | sed -n '1,30p'
+# 恢复权限（非常重要，否则后续上传/删除都坏）
+chmod u+w www/upload
+***************
+success
 ***************
 
-***************
-
-5）DELETE 的 Allow
+5）DELETE 的 Allow 405
 curl -isS --http1.1 -X DELETE "$BASE/dir/" -H "Host: localhost" | sed -n '1,40p'
 DELETE 的“删目录 405”路径也验证一次（如果采纳405的话）-》必须有 Allow:
 ***************
-
+success
 ***************
 
-
+6）test global
+chmod u+w www/upload
+echo hi > www/upload/okdel.txt
+curl -isS --http1.1 -X DELETE "$BASE/upload/okdel.txt" -H "Host: localhost" | sed -n '1,30p'
+test ! -f www/upload/okdel.txt && echo "[OK] deleted" || echo "[FAIL] still exists"
+预期：200 Deleted + 文件确实消失。
+***************
+success
+***************
 
 
 

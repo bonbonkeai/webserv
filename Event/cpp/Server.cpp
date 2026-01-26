@@ -13,7 +13,7 @@
 static bool shouldCloseByStatus(int statusCode)
 {
     // 400/413/408 要 close
-    if (statusCode == 400 || statusCode == 413 || statusCode == 408 || statusCode == 431 || statusCode == 414 || statusCode == 501)
+    if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 || statusCode == 431 || statusCode == 414 || statusCode == 501)
         return (true);
     return (false);
 }
