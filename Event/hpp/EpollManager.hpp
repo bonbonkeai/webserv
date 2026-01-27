@@ -1,4 +1,3 @@
-
 #ifndef EPOLLMANAGER_HPP
 #define EPOLLMANAGER_HPP
 

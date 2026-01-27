@@ -63,6 +63,7 @@ public:
 		const HTTPRequest&	getRequest() const;
 		bool	dejaParse(const std::string &newData);
 		void	reset();
+		bool	is_empty();
 
 private:
 		HTTPRequest	_req;

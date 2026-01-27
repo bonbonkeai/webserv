@@ -1,4 +1,4 @@
-#include "HTTP/hpp/HTTPUtils.hpp"
+#include "HTTP/hpp/HTTPUtils.hpp" 
 
 std::string toString(std::size_t n)
 {
@@ -7,18 +7,18 @@ std::string toString(std::size_t n)
     return oss.str();
 }
 
-void toLowerInPlace(std::string &s)
+void toLowerInPlace(std::string& s)
 {
     std::transform(s.begin(), s.end(), s.begin(), ::tolower);
 }
 
-void ltrimSpaces(std::string &s)
+void ltrimSpaces(std::string& s)
 {
     while (!s.empty() && (s[0] == ' ' || s[0] == '\t'))
         s.erase(0, 1);
 }
 
-bool isTokenUpperAlpha(const std::string &s)
+bool isTokenUpperAlpha(const std::string& s)
 {
     if (s.empty())
         return (false);
@@ -28,7 +28,7 @@ bool isTokenUpperAlpha(const std::string &s)
     return (true);
 }
 
-void rtrimSpaces(std::string &s)
+void rtrimSpaces(std::string& s)
 {
     while (!s.empty() && (s[s.size() - 1] == ' ' || s[s.size() - 1] == '\t'))
         s.erase(s.size() - 1, 1);
@@ -40,24 +40,12 @@ bool isTChar(unsigned char c)
         return true;
     switch (c)
     {
-    case '!':
-    case '#':
-    case '$':
-    case '%':
-    case '&':
-    case '\'':
-    case '*':
-    case '+':
-    case '-':
-    case '.':
-    case '^':
-    case '_':
-    case '`':
-    case '|':
-    case '~':
-        return (true);
-    default:
-        return (false);
+        case '!': case '#': case '$': case '%': case '&':
+        case '\'': case '*': case '+': case '-': case '.':
+        case '^': case '_': case '`': case '|': case '~':
+            return (true);
+        default:
+            return (false);
     }
 }
 
@@ -73,7 +61,7 @@ bool uriCharset(char c)
     return (allowed.find(c) != std::string::npos);
 }
 
-bool isValidUriChar(const std::string &s)
+bool isValidUriChar(const std::string& s)
 {
     for (size_t i = 0; i < s.size(); ++i)
     {
@@ -88,7 +76,7 @@ bool isValidHostChar(char c)
     return (std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-');
 }
 
-bool isValidDomainLike(const std::string &host)
+bool isValidDomainLike(const std::string& host)
 {
     if (host.empty())
         return (false);
@@ -97,7 +85,7 @@ bool isValidDomainLike(const std::string &host)
         return (true);
 
     // 每个字符必须合法，且不能以 '-' 开头结尾
-    // if (host.front() == '-' || host.back() == '-') //c++98不支持
+    // if (host.front() == '-' || host.back() == '-')
     if (host[0] == '-' || host[host.size() - 1] == '-')
         return (false);
 
@@ -109,7 +97,7 @@ bool isValidDomainLike(const std::string &host)
     return (true);
 }
 
-bool parsePort(const std::string &s, int &port_out)
+bool parsePort(const std::string& s, int& port_out)
 {
     if (s.empty() || s.size() > 5)
         return (false);
@@ -126,7 +114,7 @@ bool parsePort(const std::string &s, int &port_out)
     return (true);
 }
 
-bool isValidIp(const std::string &host)
+bool isValidIp(const std::string& host)
 {
     int parts = 0;
     size_t start = 0;
@@ -160,3 +148,4 @@ bool isValidIp(const std::string &host)
     // IPv4 必须正好 4 段
     return (parts == 4);
 }
+

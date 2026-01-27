@@ -258,10 +258,14 @@ bool	HTTPRequestParser::parseRequestLine()
     }
     // origin-form must begin with '/'
     if (_req.uri.empty() || _req.uri[0] != '/')
+    {
         return (fail(400));
+    }
     // block '..' => 403
     if (_req.uri.find("..") != std::string::npos)
-        {return (fail(403));}
+    {
+        return (fail(403));
+    }
 	_req.keep_alive = true;
 	splitUri();
     _chunk_waiting_size = true;
@@ -290,7 +294,7 @@ bool HTTPRequestParser::parseHeaders()
             //1)HTTP/1.1 必须有 Host
             if (_req.version == "HTTP/1.1")
             {
-				if (_req.headers.find("host") == _req.headers.end())
+				if (_req.headers.find("host") == _req.headers.end() || _req.headers["host"].empty())
 					return (fail(400));
             }
             //2)chunked 与 content-length 不能同时存在
@@ -596,3 +600,7 @@ bool HTTPRequestParser::parseBody()
     return parseFixedBody();
 }
 
+bool    HTTPRequestParser::is_empty()
+{
+    return _state == WAIT_REQUEST_LINE && _buffer.empty();
+}

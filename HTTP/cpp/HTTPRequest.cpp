@@ -18,7 +18,6 @@ HTTPRequest::HTTPRequest() : method(""),
             chunked(false),
             max_body_size(1024 * 1024 * 10), // 先临时 10MB
             authority("")
-
 {
 }
 
@@ -71,3 +70,8 @@ HTTPRequest& HTTPRequest::operator=(const HTTPRequest& copy)
 }
 
 HTTPRequest::~HTTPRequest() {}
+
+bool HTTPRequest::is_cgi_request() const
+{
+    return (false);
+}

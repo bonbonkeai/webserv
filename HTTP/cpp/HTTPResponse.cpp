@@ -52,7 +52,7 @@ static bool splitHeaderBody(const std::string& out, std::string& head, std::stri
 HTTPResponse HTTPResponse::buildResponseFromCGIOutput(const std::string& out, bool keep_alive)
 {
     HTTPResponse resp;
-    resp.statusCode = 200; 
+    resp.statusCode = 200;
     resp.statusText = "OK";
 
     std::string head, body;

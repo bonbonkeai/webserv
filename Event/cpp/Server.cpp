@@ -13,7 +13,7 @@
 static bool shouldCloseByStatus(int statusCode)
 {
     // 400/413/408 要 close
-    if (statusCode == 400 || statusCode == 413 || statusCode == 408 || statusCode == 431 || statusCode == 414 || statusCode == 501)
+    if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 || statusCode == 431 || statusCode == 414 || statusCode == 501)
         return (true);
     return (false);
 }
@@ -48,8 +48,6 @@ static void terminateCgiOnce(CGI_Process *cgi)
         cgi->_pid = -1; // 关键：防止后续任何路径重复 kill
     }
 }
-
-#define TRACE() std::cout << "[TRACE] " << __FILE__ << ":" << __LINE__ << std::endl;
 
 // 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
 Server::Server(int port) : port_nbr(port), socketfd(-1)
@@ -395,7 +393,44 @@ void Server::check_timeout()
         if (!c)
             continue;
         // 只对“正在读请求但未完成”的连接做 408
-        if (c->_state == READING &&
+        if (c->_state != READING)
+            continue;
+        //keepalive timeout
+        if (c->parser.is_empty())
+        {
+            if (c->is_timeout(now, ALL_TIMEOUT_MS))
+                timed_out.push_back(c->client_fd);
+            continue;
+        }
+
+        //request read timeout
+        if (!c->parser.getRequest().complet && c->is_timeout(now, ALL_TIMEOUT_MS))
+        {
+            TRACE();
+            if (!c->is_cgi)
+            {
+                HTTPResponse err = buildErrorResponse(408);
+                err.headers["connection"] = "close"; // 强制 close，语义与 B 一致
+                // content-length 一般 buildErrorResponse/ResponseBuilder 会补，但写死也无害
+                if (err.headers.find("content-length") == err.headers.end())
+                    err.headers["content-length"] = toString(err.body.size());
+                c->is_keep_alive = false;
+                c->write_buffer = ResponseBuilder::build(err);
+                c->write_pos = 0;
+                c->_state = WRITING;
+                // 让它进入写流程
+                _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
+            }
+        }
+    }
+    for(size_t i = 0; i < timed_out.size(); ++i)
+    {
+        int fd = timed_out[i];
+        _epoller->del_event(fd);
+        _manager->remove_socket_client(fd);
+        close(fd);
+    }
+        /*if (c->_state == READING &&
             !c->is_cgi &&
             !c->parser.getRequest().complet &&
             c->is_timeout(now, ALL_TIMEOUT_MS))
@@ -411,8 +446,8 @@ void Server::check_timeout()
             c->_state = WRITING;
             // 让它进入写流程
             _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
-        }
-    }
+        }*/
+    
 }
 /**
  * run 中epoller的event的fd进行检查
@@ -423,149 +458,149 @@ void Server::check_timeout()
  *  5. error处理当中，需要对fd的来源进行检查，如果是cgi那边的问题，需要kill结束进程
  */
 
-// void Server::run()
-//{
-//     set_non_block_fd(socketfd);
-//     _epoller->add_event(socketfd, EPOLLIN | EPOLLET);
-//     while (true)
-//     {
-//         int nfds = _epoller->wait(Timeout);
-//         check_cgi_timeout();
-//         check_timeout();
-//         for (int i = 0; i < nfds; i++)
-//         {
-//             int fd = _epoller->get_event_fd(i);
-//             uint32_t events = _epoller->get_event_type(i);
-//             if (fd == socketfd)
-//             {
-//                 handle_connection();
-//                 continue;
-//             }
-//             if (_manager->is_cgi_pipe(fd))
-//             {
-//                 Client *c = _manager->get_client_by_cgi_fd(fd);
-//                 if (c && (events & (EPOLLIN | EPOLLHUP)))
-//                 {
-//                     handle_cgi_read(*c, fd);
-//                     continue;
-//                 }
-//                 if (c && (events & (EPOLLERR | EPOLLRDHUP)))
-//                 {
-//                     handle_pipe_error(fd);
-//                     continue;
-//                 }
-//             }
-//             else // socket client
-//             {
-//                 Client *c = _manager->get_socket_client_by_fd(fd);
-//                 if (!c)
-//                     continue;
-//                 if (events & EPOLLIN)
-//                 {
-//                     if (do_read(*c))
-//                     {
-//                         if (c->_state == PROCESS)
-//                         {
-//                             HTTPRequest req = c->parser.getRequest();
-//                             HTTPResponse resp = process_request(req);
-//
-//                             // session a tester
-//                             // std::string session_id;
-//                             //// check if is session
-//                             // if (req.headers.find("Cookie") != req.headers.end())
-//                             //{
-//                             //     session_id = req.headers["Cookie"];
-//                             //     size_t pos = session_id.find("session_id=");
-//                             //     if (pos != std::string::npos)
-//                             //     {
-//                             //         size_t pos_end = session_id.find(";", pos);
-//                             //         session_id = session_id.substr(pos + 11, pos_end - (pos + 11));
-//                             //     }
-//                             // }
-//                             // Session *session;
-//                             // bool is_new;
-//                             // session = _session_cookie->get_session(session_id, is_new);
-//                             // if (is_new == true)
-//                             //     resp.headers["Set-Cookie"] = "session_id=" + session->_id + "; Path=/; HttpOnly";
-//                             //  cgi process request
-//                             if (req.is_cgi_request())
-//                             {
-//                                 TRACE();
-//                                 c->_cgi = new CGI_Process();
-//                                 c->_cgi->execute("./www" + req.path, const_cast<HTTPRequest &>(req));
-//                                 c->is_cgi = true;
-//
-//                                 _epoller->add_event(c->_cgi->_read_fd, EPOLLIN | EPOLLET);
-//                                 _manager->bind_cgi_fd(c->_cgi->_read_fd, c->client_fd);
-//                                 continue;
-//                             }
-//                             // c->is_keep_alive = req.keep_alive;
-//                             // keep-alive
-//                             bool ka = computeKeepAlive(req, resp.statusCode);
-//                             c->is_keep_alive = ka;
-//                             applyConnectionHeader(resp, ka);
-//
-//                             c->write_buffer = ResponseBuilder::build(resp);
-//                             c->write_pos = 0;
-//                         }
-//                         if (!c->is_cgi)
-//                         {
-//                             c->_state = WRITING;
-//                             _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
-//                         }
-//                     }
-//                 }
-//                 if (events & EPOLLOUT)
-//                 {
-//                     TRACE();
-//                     if (do_write(*c))
-//                     {
-//                         if (c->is_keep_alive)
-//                         {
-//                             c->reset();
-//                             _epoller->modif_event(fd, EPOLLIN | EPOLLET);
-//                         }
-//                         else
-//                         {
-//                             _manager->remove_socket_client(fd);
-//                             _epoller->del_event(fd);
-//                             close(fd);
-//                         }
-//                     }
-//                 }
-//                 if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
-//                 {
-//                     // std::cout << "errno: " << errno << std::endl;
-//                     // // CGI pipe 的错误，直接走 pipe error（它会生成 500 并写回 client）
-//                     // if (_manager->is_cgi_pipe(fd))
-//                     // {
-//                     //     TRACE();
-//                     //     handle_pipe_error(fd);
-//                     //     continue;
-//                     // }
-//                     // // client socket 的错误：如果已经有待发送响应，优先尝试发送，不要立刻 close 覆盖掉 504/500
-//                     // Client *c = _manager->get_socket_client_by_fd(fd);
-//                     if (c && c->_state == WRITING && !c->write_buffer.empty())
-//                     {
-//                         c->is_keep_alive = false;
-//                         // 尝试直接写一次（即使没有 EPOLLOUT）
-//                         if (do_write(*c))
-//                         {
-//                             TRACE();
-//                             _manager->remove_socket_client(fd);
-//                             _epoller->del_event(fd);
-//                             close(fd);
-//                             continue;
-//                         }
-//                         // 写到 EAGAIN -> 继续等 EPOLLOUT
-//                         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
-//                         continue;
-//                     }
-//                     // 没有待发送响应 -> 正常错误清理
-//                     handle_socket_error(fd);
-//                     continue;
-//                 }
-//             }
-//         }
-//     }
-// }
+void Server::run()
+{
+    set_non_block_fd(socketfd);
+    _epoller->add_event(socketfd, EPOLLIN | EPOLLET);
+    while (true)
+    {
+        int nfds = _epoller->wait(Timeout);
+        check_cgi_timeout();
+        check_timeout();
+        for (int i = 0; i < nfds; i++)
+        {
+            int fd = _epoller->get_event_fd(i);
+            uint32_t events = _epoller->get_event_type(i);
+            if (fd == socketfd)
+            {
+                handle_connection();
+                continue;
+            }
+            if (_manager->is_cgi_pipe(fd))
+            {
+                Client *c = _manager->get_client_by_cgi_fd(fd);
+                if (c && (events & (EPOLLIN | EPOLLHUP)))
+                {
+                    handle_cgi_read(*c, fd);
+                    continue;
+                }
+                if (c && (events & (EPOLLERR | EPOLLRDHUP)))
+                {
+                    handle_pipe_error(fd);
+                    continue;
+                }
+            }
+            else // socket client
+            {
+                Client *c = _manager->get_socket_client_by_fd(fd);
+                if (!c)
+                    continue;
+                if (events & EPOLLIN)
+                {
+                    if (do_read(*c))
+                    {
+                        if (c->_state == PROCESS)
+                        {
+                            HTTPRequest req = c->parser.getRequest();
+                            HTTPResponse resp = process_request(req);
+
+                            // session a tester
+                            // std::string session_id;
+                            //// check if is session
+                            // if (req.headers.find("Cookie") != req.headers.end())
+                            //{
+                            //     session_id = req.headers["Cookie"];
+                            //     size_t pos = session_id.find("session_id=");
+                            //     if (pos != std::string::npos)
+                            //     {
+                            //         size_t pos_end = session_id.find(";", pos);
+                            //         session_id = session_id.substr(pos + 11, pos_end - (pos + 11));
+                            //     }
+                            // }
+                            // Session *session;
+                            // bool is_new;
+                            // session = _session_cookie->get_session(session_id, is_new);
+                            // if (is_new == true)
+                            //     resp.headers["Set-Cookie"] = "session_id=" + session->_id + "; Path=/; HttpOnly";
+                            //  cgi process request
+                            if (req.is_cgi_request())
+                            {
+                                TRACE();
+                                c->_cgi = new CGI_Process();
+                                c->_cgi->execute("./www" + req.path, const_cast<HTTPRequest &>(req));
+                                c->is_cgi = true;
+
+                                _epoller->add_event(c->_cgi->_read_fd, EPOLLIN | EPOLLET);
+                                _manager->bind_cgi_fd(c->_cgi->_read_fd, c->client_fd);
+                                continue;
+                            }
+                            // c->is_keep_alive = req.keep_alive;
+                            // keep-alive
+                            bool ka = computeKeepAlive(req, resp.statusCode);
+                            c->is_keep_alive = ka;
+                            applyConnectionHeader(resp, ka);
+
+                            c->write_buffer = ResponseBuilder::build(resp);
+                            c->write_pos = 0;
+                        }
+                        if (!c->is_cgi)
+                        {
+                            c->_state = WRITING;
+                            _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+                        }
+                    }
+                }
+                if (events & EPOLLOUT)
+                {
+                    TRACE();
+                    if (do_write(*c))
+                    {
+                        if (c->is_keep_alive)
+                        {
+                            c->reset();
+                            _epoller->modif_event(fd, EPOLLIN | EPOLLET);
+                        }
+                        else
+                        {
+                            _manager->remove_socket_client(fd);
+                            _epoller->del_event(fd);
+                            close(fd);
+                        }
+                    }
+                }
+                if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
+                {
+                    // std::cout << "errno: " << errno << std::endl;
+                    // // CGI pipe 的错误，直接走 pipe error（它会生成 500 并写回 client）
+                    // if (_manager->is_cgi_pipe(fd))
+                    // {
+                    //     TRACE();
+                    //     handle_pipe_error(fd);
+                    //     continue;
+                    // }
+                    // // client socket 的错误：如果已经有待发送响应，优先尝试发送，不要立刻 close 覆盖掉 504/500
+                    // Client *c = _manager->get_socket_client_by_fd(fd);
+                    if (c && c->_state == WRITING && !c->write_buffer.empty())
+                    {
+                        c->is_keep_alive = false;
+                        // 尝试直接写一次（即使没有 EPOLLOUT）
+                        if (do_write(*c))
+                        {
+                            TRACE();
+                            _manager->remove_socket_client(fd);
+                            _epoller->del_event(fd);
+                            close(fd);
+                            continue;
+                        }
+                        // 写到 EAGAIN -> 继续等 EPOLLOUT
+                        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+                        continue;
+                    }
+                    // 没有待发送响应 -> 正常错误清理
+                    handle_socket_error(fd);
+                    continue;
+                }
+            }
+        }
+    }
+}

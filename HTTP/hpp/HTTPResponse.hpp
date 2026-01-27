@@ -28,7 +28,6 @@ public:
 		void clear();
 		HTTPResponse buildResponseFromCGIOutput(const std::string& out, bool keep_alive);
 
-
 };
 
 
