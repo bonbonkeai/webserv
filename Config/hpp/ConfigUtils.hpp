@@ -1,6 +1,36 @@
-#endif
+#ifndef CONFIGUTILS_HPP
+#define CONFIGUTILS_HPP
 
-/*存放辅助函数：
+#include <string>
+#include "HTTPResponse.hpp"
+#include "ConfigParser.hpp"
+#include "ConfigTokenizer.hpp"
+#include "ServerConfig.hpp"
+
+class ConfigUtils
+{
+
+    private:
+    public:
+        ConfigUtils();
+        ~ConfigUtils();
+
+        static int toInt(const std::string& str);
+        static size_t toSize(const std::string& str);
+        static bool toBool(const std::string& str);
+
+        static bool hasDirective(const std::map<std::string, std::vector<std::string> >& d, const std::string& cle);
+        static std::string getSimpleV(const std::map<std::string, std::vector<std::string>>& d, const std::string& cle);
+        static std::vector<std::string> getV(const std::map<std::string, std::vector<std::string>>& d, const std::string& cle);
+
+        void validate(std::vector<ServerConfig>& serveurs);
+        void validateS(ServerConfig& serveurs);
+        void validateL(ServerConfig& serveurs, LocationConfig& location);
+
+};
+#endif
+/*
+存放辅助函数：
 字符串 trim、split
 路径拼接
 解析端口 / IP

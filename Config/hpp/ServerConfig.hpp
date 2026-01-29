@@ -1,5 +1,48 @@
-#endif
+#ifndef SERVERCONFIG_HPP
+#define SERVERCONFIG_HPP
 
+#include <string>
+#include <map>
+#include <vector>
+#include "LocationConfig.hpp"
+
+/* Serveur Brut(parser)*/
+struct ServerConfig
+{
+    //server block
+    std::map<std::string, std::vector<std::string> > directives;
+    //Toutes les locations
+    std::vector<LocationConfig> locations;
+};
+
+/* Serveur Final (runtime)*/
+struct ServerRuntimeConfig
+{
+    std::string host;
+    int listen;
+    int port;
+    std::string root;
+    bool autoindex;
+    size_t client__max_body_size;
+    std::vector<std::string> index;
+    std::vector<std::string> allowed_methods;
+    std::map<int, std::string> error_page;
+    std::vector<LocationRuntimeConfig> locations;
+
+    bool matchesHost(const std::string& reqHost) const 
+    {
+        if(reqHost.empty())
+            return true;
+        std::string cleanH = reqHost;
+        size_t pos = cleanH.find(":");
+        if (pos != std::string::npos)
+            cleanH = cleanH.substr(0,pos);
+        return cleanH == host;
+    }
+};
+
+#endif
+ 
 /*存储单个 server {} block 中的配置：
 listen ip:port
 root
