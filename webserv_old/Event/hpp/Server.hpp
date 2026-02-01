@@ -56,6 +56,7 @@ public:
     void    cleanup();
     // void process_request(Client &c);
 
+    bool load_config(const std::string& path);
 private:
     // class de tous les configuration de server
     int port_nbr;
@@ -63,6 +64,10 @@ private:
     Epoller* _epoller;
     ClientManager* _manager;
     Session_manager* _session_cookie;
+
+    std::vector<ServerRuntimeConfig> _rt_servers;
+    Routing* _routing;
+    EffectiveConfig _default_cfg;
 };
 
 /*初始化 listen sockets (根据 ServerConfig)

@@ -8,7 +8,8 @@ DeleteRequest::~DeleteRequest() {}
 
 HTTPResponse DeleteRequest::handle()
 {
-    const std::string ROOT = "./www";
+    // const std::string ROOT = "./www";
+    const std::string ROOT = _req.effective.root;
 
     if (!FileUtils::isSafePath(_req.path))
     {

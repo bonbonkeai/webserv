@@ -85,6 +85,8 @@ private:
 		bool        _chunk_waiting_size;   // true: 等 size 行；false: 等 data + CRLF
 		std::size_t _chunk_expected_size;  // 当前 chunk 的大小
 
+		
+
 };
 
 #endif

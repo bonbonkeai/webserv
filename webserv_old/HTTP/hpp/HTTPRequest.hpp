@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <cstddef>
+#include "Config/hpp/EffectiveConfig.hpp"
 
 /*纯数据结构：
 method
@@ -50,6 +51,10 @@ public:
         bool    is_cgi_request() const;
 
         std::string authority;
+
+        //Config
+	EffectiveConfig effective;
+	bool	has_effective;
 };
 
 #endif

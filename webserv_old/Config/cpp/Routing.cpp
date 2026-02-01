@@ -19,7 +19,9 @@ const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req) const
     if (_serveurs.empty())
         throw std::runtime_error("No servers available in Routing::selectS");
 
-    std::string host = req.headers.count("Host") ? req.headers.at("Host") : "";
+    // std::string host = req.headers.count("Host") ? req.headers.at("Host") : "";
+    // host大小写不敏感，所以我都转小写了
+     std::string host = req.headers.count("host") ? req.headers.at("host") : "";
 
     for (size_t i = 0; i < _serveurs.size(); i++)
     {
@@ -104,7 +106,10 @@ LocationRuntimeConfig buildLocationRuntime(const LocationConfig &loc, const Serv
 EffectiveConfig Routing::resolve(const HTTPRequest& req) const
 {
     const ServerRuntimeConfig& server = selectS(req);
-    const LocationRuntimeConfig* loc = matchLocation(server, req.uri);
+    // const LocationRuntimeConfig* loc = matchLocation(server, req.uri);
+    //req.uri 包含 query（例如 /upload?a=1），前缀匹配就会被 query 干扰
+    const LocationRuntimeConfig* loc = matchLocation(server, req.path);
+
 
     EffectiveConfig cfg;
 

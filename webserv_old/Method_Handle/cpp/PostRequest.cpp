@@ -40,7 +40,8 @@ POST /upload/<file> multipart → 404
 
 HTTPResponse PostRequest::handleRawUploadFallback()
 {
-    const std::string UPLOAD_DIR = "./www/upload";
+    // const std::string UPLOAD_DIR = "./www/upload";
+    const std::string UPLOAD_DIR = FileUtils::joinPath(_req.effective.root, "upload");
 
     if (!FileUtils::isSafePath(_req.path))
     {
@@ -131,7 +132,8 @@ HTTPResponse PostRequest::handle()
             return (r);
         }
         HTTPResponse resp;
-        const std::string UPLOAD_DIR = "./www/upload";
+        // const std::string UPLOAD_DIR = "./www/upload";
+        const std::string UPLOAD_DIR = FileUtils::joinPath(_req.effective.root, "upload");
         if (UploadHandle::handleMultipart(_req, UPLOAD_DIR, resp))
             return (resp);
         return (resp); // 错误已填充

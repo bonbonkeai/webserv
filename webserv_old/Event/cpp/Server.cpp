@@ -50,7 +50,7 @@ static void terminateCgiOnce(CGI_Process *cgi)
 }
 
 // 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
-Server::Server(int port) : port_nbr(port), socketfd(-1)
+Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
 {
     _epoller = new Epoller();
     _manager = new ClientManager();
@@ -64,6 +64,7 @@ Server::~Server()
     _manager = NULL;
     delete _session_cookie;
     _session_cookie = NULL;
+    _routing = NULL;
 }
 
 void Server::cleanup()
@@ -421,6 +422,13 @@ void Server::check_timeout()
  *  5. error处理当中，需要对fd的来源进行检查，如果是cgi那边的问题，需要kill结束进程
  */
 
+ static bool isMethodAllowed(const std::string& m, const std::vector<std::string>& allow)
+{
+    for (size_t i = 0; i < allow.size(); ++i)
+        if (allow[i] == m) return true;
+    return false;
+}
+
 void Server::run()
 {
     set_non_block_fd(socketfd);
@@ -462,43 +470,94 @@ void Server::run()
                 {
                     if (do_read(*c))
                     {
+                        // if (c->_state == PROCESS)
+                        // {
+                        //     HTTPRequest req = c->parser.getRequest();
+                        //     HTTPResponse resp = process_request(req);
+
+                        //     // session a tester
+                        //     // std::string session_id;
+                        //     //// check if is session
+                        //     // if (req.headers.find("Cookie") != req.headers.end())
+                        //     //{
+                        //     //     session_id = req.headers["Cookie"];
+                        //     //     size_t pos = session_id.find("session_id=");
+                        //     //     if (pos != std::string::npos)
+                        //     //     {
+                        //     //         size_t pos_end = session_id.find(";", pos);
+                        //     //         session_id = session_id.substr(pos + 11, pos_end - (pos + 11));
+                        //     //     }
+                        //     // }
+                        //     // Session *session;
+                        //     // bool is_new;
+                        //     // session = _session_cookie->get_session(session_id, is_new);
+                        //     // if (is_new == true)
+                        //     //     resp.headers["Set-Cookie"] = "session_id=" + session->_id + "; Path=/; HttpOnly";
+                        //     //  cgi process request
+                        //     if (req.is_cgi_request())
+                        //     {
+                        //         TRACE();
+                        //         c->_cgi = new CGI_Process();
+                        //         c->_cgi->execute("./www" + req.path, const_cast<HTTPRequest &>(req));
+                        //         c->is_cgi = true;
+
+                        //         _epoller->add_event(c->_cgi->_read_fd, EPOLLIN | EPOLLET);
+                        //         _manager->bind_cgi_fd(c->_cgi->_read_fd, c->client_fd);
+                        //         continue;
+                        //     }
+                        //     // c->is_keep_alive = req.keep_alive;
+                        //     // keep-alive
+                        //     bool ka = computeKeepAlive(req, resp.statusCode);
+                        //     c->is_keep_alive = ka;
+                        //     applyConnectionHeader(resp, ka);
+
+                        //     c->write_buffer = ResponseBuilder::build(resp);
+                        //     c->write_pos = 0;
+                        // }
                         if (c->_state == PROCESS)
                         {
                             HTTPRequest req = c->parser.getRequest();
-                            HTTPResponse resp = process_request(req);
+                            // 1) resolve effective config
+                            if (_routing)
+                            {
+                                req.effective = _routing->resolve(req);
+                                req.has_effective = true;
+                            }
+                            else
+                            {
+                                req.effective = _default_cfg;
+                                req.has_effective = true;
+                            }
+                            // 2) 统一做 allowed_methods -> 405（避免每个 handler 重复写）
+                            if (!isMethodAllowed(req.method, req.effective.allowed_methods))
+                            {
+                                HTTPResponse err = buildErrorResponse(405);
+                                bool ka = computeKeepAlive(req, 405);
+                                c->is_keep_alive = ka;
+                                applyConnectionHeader(err, ka);
+                                c->write_buffer = ResponseBuilder::build(err);
+                                c->write_pos = 0;
+                                c->_state = WRITING;
+                                _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+                                continue;
+                            }
 
-                            // session a tester
-                            // std::string session_id;
-                            //// check if is session
-                            // if (req.headers.find("Cookie") != req.headers.end())
-                            //{
-                            //     session_id = req.headers["Cookie"];
-                            //     size_t pos = session_id.find("session_id=");
-                            //     if (pos != std::string::npos)
-                            //     {
-                            //         size_t pos_end = session_id.find(";", pos);
-                            //         session_id = session_id.substr(pos + 11, pos_end - (pos + 11));
-                            //     }
-                            // }
-                            // Session *session;
-                            // bool is_new;
-                            // session = _session_cookie->get_session(session_id, is_new);
-                            // if (is_new == true)
-                            //     resp.headers["Set-Cookie"] = "session_id=" + session->_id + "; Path=/; HttpOnly";
-                            //  cgi process request
+                            // 3) CGI：用 cfg.root 拼真实路径
                             if (req.is_cgi_request())
                             {
-                                TRACE();
                                 c->_cgi = new CGI_Process();
-                                c->_cgi->execute("./www" + req.path, const_cast<HTTPRequest &>(req));
+                                std::string scriptPath = req.effective.root + req.path; // 注意 root 是否带 /
+                                c->_cgi->execute(scriptPath, req); 
                                 c->is_cgi = true;
 
                                 _epoller->add_event(c->_cgi->_read_fd, EPOLLIN | EPOLLET);
                                 _manager->bind_cgi_fd(c->_cgi->_read_fd, c->client_fd);
                                 continue;
                             }
-                            // c->is_keep_alive = req.keep_alive;
-                            // keep-alive
+
+                            // 4) 普通 handler
+                            HTTPResponse resp = process_request(req);
+
                             bool ka = computeKeepAlive(req, resp.statusCode);
                             c->is_keep_alive = ka;
                             applyConnectionHeader(resp, ka);
@@ -506,6 +565,7 @@ void Server::run()
                             c->write_buffer = ResponseBuilder::build(resp);
                             c->write_pos = 0;
                         }
+
                         if (!c->is_cgi)
                         {
                             c->_state = WRITING;
@@ -566,4 +626,39 @@ void Server::run()
             }
         }
     }
+}
+
+bool Server::load_config(const std::string& path)
+{
+    ConfigTokenizer tok;
+    if (!tok.read_file(path))
+        throw std::runtime_error("config: cannot read file");
+
+    ConfigParser parser(tok.getTokens());
+    std::vector<ServerConfig> raw = parser.parse();
+
+    _rt_servers.clear();
+    for (size_t i = 0; i < raw.size(); ++i)
+    {
+        ServerRuntimeConfig srv = buildServer(raw[i]);
+        for (size_t j = 0; j < raw[i].locations.size(); ++j)
+        {
+            LocationRuntimeConfig loc = buildLocation(srv, raw[i].locations[j]);
+            srv.locations.push_back(loc);
+        }
+        _rt_servers.push_back(srv);
+    }
+
+    if (_routing) delete _routing;
+    _routing = new Routing(_rt_servers);
+
+    // 默认 cfg：用于“还没解析 Host 时”的兜底
+    // 这里用第一个 server 的 defaults
+    _default_cfg.root = _rt_servers[0].root;
+    _default_cfg.index = _rt_servers[0].index;
+    _default_cfg.autoindex = _rt_servers[0].autoindex;
+    _default_cfg.allowed_methods = _rt_servers[0].allowed_methods;
+    _default_cfg.error_pages = _rt_servers[0].error_page;
+
+    return true;
 }
