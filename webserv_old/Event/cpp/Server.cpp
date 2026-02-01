@@ -64,6 +64,7 @@ Server::~Server()
     _manager = NULL;
     delete _session_cookie;
     _session_cookie = NULL;
+    delete _routing;
     _routing = NULL;
 }
 
@@ -83,6 +84,11 @@ void Server::cleanup()
     {
         delete _session_cookie;
         _session_cookie = NULL;
+    }
+    if (_routing)
+    {
+        delete _routing;
+        _routing = NULL;
     }
 }
 
@@ -521,6 +527,7 @@ void Server::run()
                             if (_routing)
                             {
                                 req.effective = _routing->resolve(req);
+                                req.max_body_size = req.effective.max_body_size;
                                 req.has_effective = true;
                             }
                             else
@@ -546,7 +553,7 @@ void Server::run()
                             if (req.is_cgi_request())
                             {
                                 c->_cgi = new CGI_Process();
-                                std::string scriptPath = req.effective.root + req.path; // 注意 root 是否带 /
+                                std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
                                 c->_cgi->execute(scriptPath, req); 
                                 c->is_cgi = true;
 
@@ -649,9 +656,16 @@ bool Server::load_config(const std::string& path)
         _rt_servers.push_back(srv);
     }
 
-    if (_routing) delete _routing;
-    _routing = new Routing(_rt_servers);
+    if (_routing)
+    {
+        delete _routing;
+        _routing = NULL;
+    }
+    if (!_rt_servers.empty())
+        _routing = new Routing(_rt_servers);
 
+    if (_rt_servers.empty())
+        throw std::runtime_error("config: no server block found");
     // 默认 cfg：用于“还没解析 Host 时”的兜底
     // 这里用第一个 server 的 defaults
     _default_cfg.root = _rt_servers[0].root;
@@ -659,6 +673,7 @@ bool Server::load_config(const std::string& path)
     _default_cfg.autoindex = _rt_servers[0].autoindex;
     _default_cfg.allowed_methods = _rt_servers[0].allowed_methods;
     _default_cfg.error_pages = _rt_servers[0].error_page;
-
+    
+    _default_cfg.max_body_size = _rt_servers[0].client__max_body_size;
     return true;
 }

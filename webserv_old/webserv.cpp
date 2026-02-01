@@ -76,12 +76,10 @@ int main(int ac, char **av)
         if (ac == 2)
             port = std::atoi(av[1]);
         Server s(port);
-        //
-        s.load_config("conf/default.conf");
-        //
         if (!s.init_sockets())
             throw std::runtime_error("init_sockets() failed");
         std::cout << "Init succes, entering event loop" << std::endl;
+        s.load_config(av[1]);
         s.run();
         return (0);
     }
