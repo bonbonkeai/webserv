@@ -1,5 +1,8 @@
 #include "Config/hpp/ConfigUtils.hpp"
 
+ConfigUtils::ConfigUtils() {}
+ConfigUtils::~ConfigUtils() {}
+
 /**
  * Conversion string en int
  */

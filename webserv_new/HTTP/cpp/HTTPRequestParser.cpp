@@ -131,7 +131,9 @@ bool	HTTPRequestParser::dejaParse(const std::string &newData)
 {
 	const std::size_t MAX_HEADER_SIZE = 8192; // 后续接 config
     if (!newData.empty())
+    {
         _received_any = true;
+    }
 	_buffer += newData;
 	if (_state == WAIT_REQUEST_LINE || _state == WAIT_HEADERS)
     {

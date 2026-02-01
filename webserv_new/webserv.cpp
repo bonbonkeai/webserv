@@ -33,7 +33,6 @@ int main(int ac, char** av)
         std::vector<ServerConfig> raw = parser.parse();
         ConfigUtils utils;
         utils.validate(raw);
-
         std::vector<ServerRuntimeConfig> servers = buildRuntime(raw);
         if (servers.empty())
         {

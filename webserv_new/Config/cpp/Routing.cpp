@@ -39,7 +39,7 @@ const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req, int listen_p
 // -------------------
 const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &server, const std::string &uri) const
 {
-    const LocationRuntimeConfig *best = nullptr;
+    const LocationRuntimeConfig *best = NULL;
     size_t bestLen = 0;
 
     for (size_t i = 0; i < server.locations.size(); i++)
@@ -253,7 +253,7 @@ EffectiveConfig Routing::resolve(const HTTPRequest& req, int listen_port) const
 // -------------------
 LocationRuntimeConfig *matchLocation(ServerRuntimeConfig &srv, const std::string &path)
 {
-    LocationRuntimeConfig *best = nullptr;
+    LocationRuntimeConfig *best = NULL;
     size_t bestLen = 0;
 
     for (size_t i = 0; i < srv.locations.size(); i++)

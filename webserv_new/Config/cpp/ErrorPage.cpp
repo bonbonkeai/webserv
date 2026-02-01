@@ -16,7 +16,7 @@ std::string ErrorPage::load_error_file(const std::string& path)
 
 std::string ErrorPage::get_error_page_path(int status, const ServerConfig& server,LocationConfig* location)
 {
-    std::string str = std::to_string(status);
+    std::string str = toString(status);
     /*location override*/
     if (location)
     {

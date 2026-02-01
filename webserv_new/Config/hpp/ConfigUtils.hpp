@@ -2,6 +2,8 @@
 #define CONFIGUTILS_HPP
 
 #include <string>
+#include <cstdlib>   // for atoi
+#include <cctype>    // for std::isdigit
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "ConfigParser.hpp"
 #include "Config/hpp/ConfigTokenizer.hpp"
@@ -26,7 +28,6 @@ class ConfigUtils
         void validate(std::vector<ServerConfig>& serveurs);
         void validateS(ServerConfig& serveurs);
         void validateL(ServerConfig& serveurs, LocationConfig& location);
-
 };
 #endif
 /*

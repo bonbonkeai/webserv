@@ -3,8 +3,10 @@
 
 #include <string>
 #include <vector>
+#include <cstddef>   // for NULL
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "HTTP/hpp/HTTPRequest.hpp"
+#include "HTTP/hpp/HTTPUtils.hpp" 
 #include "ConfigParser.hpp"
 #include "Config/hpp/ConfigTokenizer.hpp"
 #include "ServerConfig.hpp"
