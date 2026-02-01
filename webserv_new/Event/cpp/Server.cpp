@@ -19,13 +19,17 @@
 static bool shouldCloseByStatus(int statusCode)
 {
     // 400/413/408 要 close
-    if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 || statusCode == 431 || statusCode == 414 || statusCode == 501)
+    if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 || statusCode == 431 || statusCode == 414 || statusCode == 501 || statusCode == 405 || statusCode == 505)
         return (true);
     return (false);
 }
 
 static bool computeKeepAlive(const HTTPRequest &req, int statusCode)
 {
+    // 非 HTTP/1.1 一律 close
+    if (!req.version.empty() && req.version != "HTTP/1.1")
+        return (false);
+
     // 客户端显式 close -> 永远 close（ parser 已经把 req.keep_alive 置 false）
     if (!req.keep_alive)
         return (false);
@@ -483,7 +487,7 @@ bool Server::do_read(Client &c)
                     c._state = PROCESS;
                     return (true);
                 }
-                bool ka = computeKeepAlive(req, code);
+                bool ka = false;
                 c.is_keep_alive = ka;
                 applyConnectionHeader(err, ka);
                 c.write_buffer = ResponseBuilder::build(err);

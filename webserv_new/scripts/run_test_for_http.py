@@ -134,7 +134,7 @@ def main():
         print("\n$ " + cmd)
         try:
             p = subprocess.run(cmd, shell=True, cwd=ROOT, env=env, text=True,
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=8)
             print(p.stdout)
             if p.returncode != 0:
                 print("[WARN] non-zero exit:", p.returncode)
