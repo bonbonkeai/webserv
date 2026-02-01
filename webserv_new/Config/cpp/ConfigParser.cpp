@@ -73,7 +73,6 @@ LocationConfig ConfigParser::parse_location()
     LocationConfig loc;
 
     expect(TYPE_WORD, "Expected 'location'");
-    next();
 
     // Path
     if (current().type != TYPE_WORD)
