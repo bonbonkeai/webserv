@@ -119,9 +119,15 @@ def main():
                 print("\n$ " + cmd)
                 print("[WARN] ./test_http not found, skipping")
                 continue
-        # Add timeout to nc commands to avoid hangs
+        # Add nc timeout to avoid hangs
         if ' nc ' in cmd or cmd.lstrip().startswith('nc ' ) or '| nc' in cmd:
-                    # Add max time to curl if not present
+            if '| nc' in cmd:
+                cmd = cmd.replace('| nc', '| nc -w 5')
+            else:
+                cmd = cmd.replace('nc -v ', 'nc -w 5 -v ')
+                if cmd.lstrip().startswith('nc '):
+                    cmd = cmd.replace('nc ', 'nc -w 5 ', 1)
+        # Add max time to curl if not present
         if cmd.lstrip().startswith('curl ') and '--max-time' not in cmd:
             parts = cmd.split(' ', 1)
             cmd = parts[0] + ' --max-time 5 ' + (parts[1] if len(parts) > 1 else '')
