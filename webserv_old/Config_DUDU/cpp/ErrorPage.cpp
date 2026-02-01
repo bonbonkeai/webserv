@@ -1,4 +1,4 @@
-#include "Config/hpp/ErrorPage.hpp"
+#include "ErrorPage.hpp"
 #include <sstream>
 #include <fstream>
 #include "HTTP/hpp/ErrorResponse.hpp"
@@ -16,7 +16,7 @@ std::string ErrorPage::load_error_file(const std::string& path)
 
 std::string ErrorPage::get_error_page_path(int status, const ServerConfig& server,LocationConfig* location)
 {
-    std::string str = toString(status);
+    std::string str = std::to_string(status);
     /*location override*/
     if (location)
     {
@@ -87,5 +87,4 @@ HTTPResponse ErrorPage::generate(int status, const ServerConfig& s, LocationConf
     res.statusCode = status;
     buildErrorResponse(res.statusCode);
     res.body = body;
-    return res;
 }

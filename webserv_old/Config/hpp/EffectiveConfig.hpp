@@ -14,12 +14,19 @@ struct EffectiveConfig
     std::vector<std::string> index;
     bool autoindex;
     std::vector<std::string> allowed_methods;
-    std::map<int, std::string> error_pages;
+    std::map<int, ErrorPageRule> error_pages;
     bool is_cgi;
-    std::string cgi_path;
+    std::map<std::string, std::string> cgi_exec;
+    bool has_return;
+    int return_code;
+    std::string return_url;
     size_t max_body_size;
 
-    EffectiveConfig(): autoindex(false), is_cgi(false), max_body_size(0){}
+    EffectiveConfig(): autoindex(false), is_cgi(false), has_return(false), return_code(302), max_body_size(0){}
 };
+
+ServerRuntimeConfig buildServer(const ServerConfig& raw);
+LocationRuntimeConfig buildLocationRuntime(const LocationConfig& loc, const ServerRuntimeConfig& server);
+std::vector<ServerRuntimeConfig> buildRuntime(const std::vector<ServerConfig>& raw);
 
 #endif

@@ -1,5 +1,17 @@
-#include "Routing.hpp"
+#include "Config/hpp/Routing.hpp"
 #include <stdexcept>
+
+static bool isNumberString(const std::string& s)
+{
+    if (s.empty())
+        return false;
+    for (size_t i = 0; i < s.size(); ++i)
+        if (!std::isdigit(static_cast<unsigned char>(s[i])))
+            return false;
+    return true;
+}
+
+#include <cctype>
 
 // -------------------
 // Constructeur / Destructeur
@@ -9,26 +21,27 @@ Routing::Routing(const std::vector<ServerRuntimeConfig> &serveurs)
 {
 }
 
-Routing::~Routing() {}
-
 // -------------------
 // Sélection du serveur correspondant au Host
 // -------------------
-const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req) const
+const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req, int listen_port) const
 {
     if (_serveurs.empty())
         throw std::runtime_error("No servers available in Routing::selectS");
 
-    // std::string host = req.headers.count("Host") ? req.headers.at("Host") : "";
-    // host大小写不敏感，所以我都转小写了
-     std::string host = req.headers.count("host") ? req.headers.at("host") : "";
-
+    std::string host = req.headers.count("host") ? req.headers.at("host") : "";
+    const ServerRuntimeConfig* first_port_match = NULL;
     for (size_t i = 0; i < _serveurs.size(); i++)
     {
+        if (_serveurs[i].port != listen_port)
+            continue;
+        if (!first_port_match)
+            first_port_match = &_serveurs[i];
         if (_serveurs[i].matchesHost(host))
             return _serveurs[i];
     }
-    // Si aucun host ne match, retourne le premier serveur (default)
+    if (first_port_match)
+        return *first_port_match;
     return _serveurs[0];
 }
 
@@ -37,7 +50,7 @@ const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req) const
 // -------------------
 const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &server, const std::string &uri) const
 {
-    const LocationRuntimeConfig *best = nullptr;
+    const LocationRuntimeConfig *best = NULL;
     size_t bestLen = 0;
 
     for (size_t i = 0; i < server.locations.size(); i++)
@@ -64,6 +77,7 @@ const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &s
 LocationRuntimeConfig buildLocationRuntime(const LocationConfig &loc, const ServerRuntimeConfig &server)
 {
     LocationRuntimeConfig rt;
+    (void)server;
 
     rt.path = loc.path;
 
@@ -89,6 +103,11 @@ LocationRuntimeConfig buildLocationRuntime(const LocationConfig &loc, const Serv
         rt.allow_methodes = ConfigUtils::getV(loc.directives, "allowed_methods");
         rt.has_methodes = true;
     }
+    else if (ConfigUtils::hasDirective(loc.directives, "allow_methods"))
+    {
+        rt.allow_methodes = ConfigUtils::getV(loc.directives, "allow_methods");
+        rt.has_methodes = true;
+    }
     else
         rt.has_methodes = false;
 
@@ -100,16 +119,120 @@ LocationRuntimeConfig buildLocationRuntime(const LocationConfig &loc, const Serv
     else
         rt.has_index = false;
 
+    if (ConfigUtils::hasDirective(loc.directives, "client_max_body_size"))
+    {
+        rt.client_max_body_size =
+            ConfigUtils::toSize(
+                ConfigUtils::getSimpleV(loc.directives, "client_max_body_size"));
+        rt.has_client_max_body_size = true;
+    }
+    else
+        rt.has_client_max_body_size = false;
+
+    rt.has_return = false;
+    rt.return_code = 302;
+    rt.return_url.clear();
+    if (ConfigUtils::hasDirective(loc.directives, "return"))
+    {
+        std::vector<std::string> values = ConfigUtils::getV(loc.directives, "return");
+        if (!values.empty())
+        {
+            bool is_num = true;
+            for (size_t i = 0; i < values[0].size(); ++i)
+            {
+                if (!std::isdigit(static_cast<unsigned char>(values[0][i])))
+                {
+                    is_num = false;
+                    break;
+                }
+            }
+            if (is_num)
+            {
+                rt.return_code = ConfigUtils::toInt(values[0]);
+                if (values.size() >= 2)
+                    rt.return_url = values[1];
+            }
+            else
+            {
+                rt.return_code = 302;
+                rt.return_url = values[0];
+            }
+            if (!rt.return_url.empty())
+                rt.has_return = true;
+        }
+    }
+
+    rt.has_cgi = false;
+    rt.cgi_exec.clear();
+    if (ConfigUtils::hasDirective(loc.directives, "cgi"))
+    {
+        std::vector<std::string> values = ConfigUtils::getV(loc.directives, "cgi");
+        if (values.size() == 1)
+        {
+            rt.cgi_exec[values[0]] = "";
+        }
+        else
+        {
+            for (size_t i = 0; i + 1 < values.size(); i += 2)
+            {
+                std::string ext = values[i];
+                std::string exec = values[i + 1];
+                if (!ext.empty())
+                    rt.cgi_exec[ext] = exec;
+            }
+        }
+        if (!rt.cgi_exec.empty())
+            rt.has_cgi = true;
+    }
+
+    rt.has_error_pages = false;
+    rt.error_pages.clear();
+    if (ConfigUtils::hasDirective(loc.directives, "error_page"))
+    {
+        std::vector<std::string> values = ConfigUtils::getV(loc.directives, "error_page");
+        if (values.size() >= 2)
+        {
+            bool override_set = false;
+            int override_code = 0;
+            size_t idx = 0;
+            std::vector<int> codes;
+            for (; idx < values.size(); ++idx)
+            {
+                if (!values[idx].empty() && values[idx][0] == '=')
+                {
+                    override_set = true;
+                    if (values[idx].size() > 1)
+                        override_code = ConfigUtils::toInt(values[idx].substr(1));
+                    ++idx;
+                    break;
+                }
+                if (!isNumberString(values[idx]))
+                    break;
+                codes.push_back(ConfigUtils::toInt(values[idx]));
+            }
+            if (!codes.empty() && idx < values.size())
+            {
+                std::string uri = values[idx];
+                for (size_t i = 0; i < codes.size(); ++i)
+                {
+                    ErrorPageRule rule;
+                    rule.uri = uri;
+                    rule.override_set = override_set;
+                    rule.override_code = override_code;
+                    rt.error_pages[codes[i]] = rule;
+                }
+                rt.has_error_pages = !rt.error_pages.empty();
+            }
+        }
+    }
+
     return rt;
 }
 
-EffectiveConfig Routing::resolve(const HTTPRequest& req) const
+EffectiveConfig Routing::resolve(const HTTPRequest& req, int listen_port) const
 {
-    const ServerRuntimeConfig& server = selectS(req);
-    // const LocationRuntimeConfig* loc = matchLocation(server, req.uri);
-    //req.uri 包含 query（例如 /upload?a=1），前缀匹配就会被 query 干扰
-    const LocationRuntimeConfig* loc = matchLocation(server, req.path);
-
+    const ServerRuntimeConfig& server = selectS(req, listen_port);
+    const LocationRuntimeConfig* loc = matchLocation(server, req.uri);
 
     EffectiveConfig cfg;
 
@@ -121,6 +244,25 @@ EffectiveConfig Routing::resolve(const HTTPRequest& req) const
         : server.allowed_methods;
 
     cfg.error_pages = server.error_page;
+    if (loc && loc->has_error_pages)
+    {
+        for (std::map<int, ErrorPageRule>::const_iterator it = loc->error_pages.begin();
+             it != loc->error_pages.end(); ++it)
+            cfg.error_pages[it->first] = it->second;
+    }
+    cfg.max_body_size = (loc && loc->has_client_max_body_size)
+        ? loc->client_max_body_size
+        : server.client__max_body_size;
+
+    cfg.is_cgi = (loc && loc->has_cgi);
+    cfg.cgi_exec = (loc && loc->has_cgi) ? loc->cgi_exec : std::map<std::string, std::string>();
+
+    cfg.has_return = (loc && loc->has_return);
+    if (cfg.has_return)
+    {
+        cfg.return_code = loc->return_code;
+        cfg.return_url = loc->return_url;
+    }
 
     return cfg;
 }
@@ -131,7 +273,7 @@ EffectiveConfig Routing::resolve(const HTTPRequest& req) const
 // -------------------
 LocationRuntimeConfig *matchLocation(ServerRuntimeConfig &srv, const std::string &path)
 {
-    LocationRuntimeConfig *best = nullptr;
+    LocationRuntimeConfig *best = NULL;
     size_t bestLen = 0;
 
     for (size_t i = 0; i < srv.locations.size(); i++)

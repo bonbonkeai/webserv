@@ -1,4 +1,4 @@
-#include "Config/hpp/ConfigTokenizer.hpp"
+#include "ConfigTokenizer.hpp"
 #include <fstream>
 #include <string>
 #include <iterator>
@@ -47,15 +47,6 @@ Token   ConfigTokenizer::get_next_token(const std::string& str, size_t& pos)
     size_t  tmp_col = current_col;
     size_t  tmp_line = current_line;
 
-    if (c == '/' && (pos + 1) < str.length() && str[pos + 1] == '/')
-    {
-        while (pos < str.length() && str[pos] != '\n')
-        {
-            pos++;
-            current_col++;
-        }
-        return Token(TYPE_COMMENT, "", tmp_line, tmp_col);
-    }
     if (is_word(c))
         return Token(TYPE_WORD, read_word(str, pos), tmp_line, tmp_col);
     if (is_number(c))
@@ -156,7 +147,6 @@ void ConfigTokenizer::print_tokens() const
 bool    ConfigTokenizer::tokenise_string(const std::string& str)
 {
     size_t  pos = 0;
-    _tokens.clear();
     current_col = 1;
     current_line = 1;
 

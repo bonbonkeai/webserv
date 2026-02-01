@@ -3,7 +3,7 @@
 
 #include <string>
 #include <vector>
-#include "Config/hpp/ConfigTokenizer.hpp"
+#include "ConfigTokenizer.hpp"
 #include "LocationConfig.hpp"
 #include "ServerConfig.hpp"
 

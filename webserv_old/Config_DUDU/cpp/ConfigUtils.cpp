@@ -1,7 +1,4 @@
-#include "Config/hpp/ConfigUtils.hpp"
-
-ConfigUtils::ConfigUtils() {}
-ConfigUtils::~ConfigUtils() {}
+#include "ConfigUtils.hpp"
 
 /**
  * Conversion string en int
@@ -11,8 +8,7 @@ int ConfigUtils::toInt(const std::string& str)
     if(str.empty())
         throw std::runtime_error("Empty number");
     for(size_t i = 0; i < str.size(); i++)
-        if (!std::isdigit(static_cast<unsigned char>(str[i])))
-            throw std::runtime_error(std::string("Invalid number: ") + str);
+        if (!std::isdigit(static_cast<unsigned char>(str[i])))            throw std::runtime_error("Invalid number");
     return std::atoi(str.c_str());
 }
 
@@ -23,23 +19,10 @@ size_t ConfigUtils::toSize(const std::string& str)
 {
     if(str.empty())
         throw std::runtime_error("Empty size");
-    std::string digits = str;
-    size_t multiplier = 1;
-    char last = str[str.size() - 1];
-    if (last == 'k' || last == 'K' || last == 'm' || last == 'M')
-    {
-        digits = str.substr(0, str.size() - 1);
-        if (last == 'k' || last == 'K')
-            multiplier = 1024;
-        else
-            multiplier = 1024 * 1024;
-    }
-    if (digits.empty())
-        throw std::runtime_error("Invalid size");
-    for(size_t i=0; i<digits.size(); i++)
-        if (!std::isdigit(static_cast<unsigned char>(digits[i])))
+    for(size_t i=0; i<str.size(); i++)
+        if (!std::isdigit(static_cast<unsigned char>(str[i])))
             throw std::runtime_error("Invalid size");
-    return static_cast<size_t>(std::atoi(digits.c_str())) * multiplier;
+    return static_cast<size_t>(std::atoi(str.c_str()));
 }
 
 /**
@@ -61,9 +44,9 @@ bool ConfigUtils::hasDirective(const std::map<std::string, std::vector<std::stri
 /**
  * une directive avec une seule valeur
  */
-std::string ConfigUtils::getSimpleV(const std::map<std::string, std::vector<std::string> >& d, const std::string& cle)
+std::string ConfigUtils::getSimpleV(const std::map<std::string, std::vector<std::string>>& d, const std::string& cle)
 {
-    std::map<std::string, std::vector<std::string> >::const_iterator it = d.find(cle);
+    std::map<std::string, std::vector<std::string>>::const_iterator it = d.find(cle);
 
     if (it == d.end())
         throw std::runtime_error("Directive not found " + cle);
@@ -75,9 +58,9 @@ std::string ConfigUtils::getSimpleV(const std::map<std::string, std::vector<std:
 /**
  * Directive avec plusieurs valeurs
  */
-std::vector<std::string> ConfigUtils::getV(const std::map<std::string, std::vector<std::string> >& d, const std::string& cle)
+std::vector<std::string> ConfigUtils::getV(const std::map<std::string, std::vector<std::string>>& d, const std::string& cle)
 {
-    std::map<std::string, std::vector<std::string> >::const_iterator it=d.find(cle);
+    std::map<std::string, std::vector<std::string>>::const_iterator it=d.find(cle);
 
     if (it == d.end())
         throw std::runtime_error("Directive not found " + cle);
@@ -90,11 +73,9 @@ std::vector<std::string> ConfigUtils::getV(const std::map<std::string, std::vect
 void ConfigUtils::validateL(ServerConfig& serveurs, LocationConfig& l)
 {
     (void)serveurs;
-    if (hasDirective(l.directives, "allowed_methods") || hasDirective(l.directives, "allow_methods"))
+    if (hasDirective(l.directives, "allowed_methods"))
     {
-        std::vector<std::string> method = hasDirective(l.directives, "allowed_methods")
-            ? getV(l.directives, "allowed_methods")
-            : getV(l.directives, "allow_methods");
+        std::vector<std::string> method = getV(l.directives, "allowed_methods");
 
         for(size_t i=0; i<method.size();i++)
         {
@@ -128,3 +109,4 @@ void ConfigUtils::validate(std::vector<ServerConfig>& serveurs)
     for(size_t i = 0; i<serveurs.size(); i++)
         validateS(serveurs[i]);
 }
+

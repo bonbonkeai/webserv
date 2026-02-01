@@ -2,9 +2,9 @@
 #define ERRORPAGE_HPP
 
 #include <string>
-#include "HTTP/hpp/HTTPResponse.hpp"
+#include "HTTPResponse.hpp"
 #include "ConfigParser.hpp"
-#include "Config/hpp/ConfigTokenizer.hpp"
+#include "ConfigTokenizer.hpp"
 #include "LocationConfig.hpp"
 #include "ServerConfig.hpp"
 
