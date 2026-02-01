@@ -121,8 +121,7 @@ def main():
                 continue
         # Add timeout to nc commands to avoid hangs
         if ' nc ' in cmd or cmd.lstrip().startswith('nc ' ) or '| nc' in cmd:
-            cmd = 'timeout 5s ' + cmd
-        # Add max time to curl if not present
+                    # Add max time to curl if not present
         if cmd.lstrip().startswith('curl ') and '--max-time' not in cmd:
             parts = cmd.split(' ', 1)
             cmd = parts[0] + ' --max-time 5 ' + (parts[1] if len(parts) > 1 else '')
