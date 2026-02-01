@@ -12,6 +12,12 @@ SRCS =	HTTP/cpp/HTTPRequest.cpp \
 		HTTP/cpp/HTTPUtils.cpp \
 		HTTP/cpp/RequestFactory.cpp \
 		HTTP/cpp/Session.cpp \
+		Config/cpp/ConfigTokenizer.cpp \
+		Config/cpp/ConfigParser.cpp \
+		Config/cpp/ConfigUtils.cpp \
+		Config/cpp/EffectiveConfig.cpp \
+		Config/cpp/Routing.cpp \
+		Config/cpp/ErrorPage.cpp \
 		Method_Handle/cpp/DeleteRequest.cpp \
 		Method_Handle/cpp/DirectoryHandle.cpp \
 		Method_Handle/cpp/ErrorRequest.cpp \
@@ -35,8 +41,8 @@ SRCS =	HTTP/cpp/HTTPRequest.cpp \
 
 OBJS = $(SRCS:.cpp=.o)
 
-NAME = test_http
-# NAME = webserv
+# NAME = test_http
+NAME = webserv
 
 all: $(NAME)
 
