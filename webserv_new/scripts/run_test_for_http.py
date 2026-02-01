@@ -114,8 +114,8 @@ def main():
         cmd = c
         # Skip ./test_http if missing
         if cmd.strip().startswith("./test_http"):
-            exe = (ROOT / 'test_http')
-            if not exe.exists():
+            exe = os.path.join(ROOT, 'test_http')
+            if not os.path.exists(exe):
                 print("\n$ " + cmd)
                 print("[WARN] ./test_http not found, skipping")
                 continue
