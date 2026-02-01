@@ -11,7 +11,8 @@ int ConfigUtils::toInt(const std::string& str)
     if(str.empty())
         throw std::runtime_error("Empty number");
     for(size_t i = 0; i < str.size(); i++)
-        if (!std::isdigit(static_cast<unsigned char>(str[i])))            throw std::runtime_error("Invalid number");
+        if (!std::isdigit(static_cast<unsigned char>(str[i])))
+            throw std::runtime_error(std::string("Invalid number: ") + str);
     return std::atoi(str.c_str());
 }
 
