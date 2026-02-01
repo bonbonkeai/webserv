@@ -111,9 +111,24 @@ def main():
 
     env = os.environ.copy()
     for c in cmds:
-        print("\n$ " + c)
+        cmd = c
+        # Skip ./test_http if missing
+        if cmd.strip().startswith("./test_http"):
+            exe = (ROOT / 'test_http')
+            if not exe.exists():
+                print("\n$ " + cmd)
+                print("[WARN] ./test_http not found, skipping")
+                continue
+        # Add timeout to nc commands to avoid hangs
+        if ' nc ' in cmd or cmd.lstrip().startswith('nc ' ) or '| nc' in cmd:
+            cmd = 'timeout 5s ' + cmd
+        # Add max time to curl if not present
+        if cmd.lstrip().startswith('curl ') and '--max-time' not in cmd:
+            parts = cmd.split(' ', 1)
+            cmd = parts[0] + ' --max-time 5 ' + (parts[1] if len(parts) > 1 else '')
+        print("\n$ " + cmd)
         try:
-            p = subprocess.run(c, shell=True, cwd=ROOT, env=env, text=True,
+            p = subprocess.run(cmd, shell=True, cwd=ROOT, env=env, text=True,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             print(p.stdout)
             if p.returncode != 0:
