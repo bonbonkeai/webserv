@@ -1,0 +1,74 @@
+#ifndef CGIPROCESS_HPP
+#define CGIPROCESS_HPP
+
+#include "../../HTTP/hpp/HTTPRequest.hpp"
+#include "../../HTTP/hpp/HTTPResponse.hpp"
+#include "Event/hpp/Server.hpp"
+
+#include <iostream>
+#include <vector>
+#include <map>
+#include <iterator>
+#include <unistd.h>
+#include <algorithm>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <string>
+
+class   Server;
+
+struct Client;
+struct CGI_ENV
+{
+    std::vector<std::string> env_str;
+    std::vector<char *> envp;
+
+    void final_env()
+    {
+        for (size_t i = 0; i < env_str.size(); i++)
+            envp.push_back((char *)env_str[i].c_str());
+        envp.push_back(NULL);
+    }
+    ~CGI_ENV() {}
+};
+
+class CGI_Process
+{
+private:
+
+public:
+    pid_t _pid;
+    int _read_fd;
+    int _write_fd;
+    std::string _output_buffer;
+
+    // time_t start_time;
+
+    unsigned long long start_time_ms;
+    unsigned long long  last_output_ms;
+
+    CGI_Process();
+    ~CGI_Process();
+
+    std::string format_header_key(const std::string &key);
+    CGI_ENV get_env_from_request(HTTPRequest &req); // 可能还需要别的内容
+    bool execute(const std::string &script_path, const std::string &exec_path, HTTPRequest &req);
+    void reset();
+    void append_output(const char *buf, size_t n);
+    void    set_non_block_fd(int fd);
+    //del_cgi_fd()调用
+    void reset_no_kill();
+};
+
+#endif
+
+// 完整 CGI 子进程管理：
+//     建立 pipe
+//     fork
+//     子进程 dup2 → execve
+//     父进程写 body 到 stdin
+//     父进程将 stdout fd 加入 B 的 poll
+//     解析完毕后返回到 Request handle。
