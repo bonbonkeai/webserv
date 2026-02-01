@@ -1,5 +1,16 @@
 #include "Config/hpp/Routing.hpp"
 #include <stdexcept>
+
+static bool isNumberString(const std::string& s)
+{
+    if (s.empty())
+        return false;
+    for (size_t i = 0; i < s.size(); ++i)
+        if (!std::isdigit(static_cast<unsigned char>(s[i])))
+            return false;
+    return true;
+}
+
 #include <cctype>
 
 // -------------------
@@ -181,28 +192,37 @@ LocationRuntimeConfig buildLocationRuntime(const LocationConfig &loc, const Serv
         std::vector<std::string> values = ConfigUtils::getV(loc.directives, "error_page");
         if (values.size() >= 2)
         {
-            std::string uri = values[values.size() - 1];
             bool override_set = false;
             int override_code = 0;
-            size_t codes_end = values.size() - 1;
-            if (codes_end >= 1 && values[codes_end - 1].size() >= 1 && values[codes_end - 1][0] == '=')
+            size_t idx = 0;
+            std::vector<int> codes;
+            for (; idx < values.size(); ++idx)
             {
-                override_set = true;
-                std::string v = values[codes_end - 1];
-                if (v.size() > 1)
-                    override_code = ConfigUtils::toInt(v.substr(1));
-                codes_end -= 1;
+                if (!values[idx].empty() && values[idx][0] == '=')
+                {
+                    override_set = true;
+                    if (values[idx].size() > 1)
+                        override_code = ConfigUtils::toInt(values[idx].substr(1));
+                    ++idx;
+                    break;
+                }
+                if (!isNumberString(values[idx]))
+                    break;
+                codes.push_back(ConfigUtils::toInt(values[idx]));
             }
-            for (size_t i = 0; i < codes_end; ++i)
+            if (!codes.empty() && idx < values.size())
             {
-                int code = ConfigUtils::toInt(values[i]);
-                ErrorPageRule rule;
-                rule.uri = uri;
-                rule.override_set = override_set;
-                rule.override_code = override_code;
-                rt.error_pages[code] = rule;
+                std::string uri = values[idx];
+                for (size_t i = 0; i < codes.size(); ++i)
+                {
+                    ErrorPageRule rule;
+                    rule.uri = uri;
+                    rule.override_set = override_set;
+                    rule.override_code = override_code;
+                    rt.error_pages[codes[i]] = rule;
+                }
+                rt.has_error_pages = !rt.error_pages.empty();
             }
-            rt.has_error_pages = !rt.error_pages.empty();
         }
     }
 
