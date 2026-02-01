@@ -43,10 +43,8 @@ ServerConfig ConfigParser::parse_server()
 {
     ServerConfig server;
 
-    expect(TYPE_WORD, "Expected 'server'");
-    if (current().value != "server")
+    if (current().type != TYPE_WORD || current().value != "server")
         throw std::runtime_error("'server' keyword expected at line " + toString(current().line));
-
     next();
     expect(TYPE_L_CURLY, "Expected '{' after server");
 
