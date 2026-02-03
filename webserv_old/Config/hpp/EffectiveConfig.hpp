@@ -4,9 +4,9 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "LocationConfig.hpp"
-#include "ServerConfig.hpp"
-#include "ConfigUtils.hpp"
+#include "Config/hpp/LocationConfig.hpp"
+#include "Config/hpp/ServerConfig.hpp"
+#include "Config/hpp/ConfigUtils.hpp"
 
 struct EffectiveConfig
 {

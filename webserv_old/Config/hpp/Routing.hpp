@@ -7,11 +7,11 @@
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "HTTP/hpp/HTTPRequest.hpp"
 #include "HTTP/hpp/HTTPUtils.hpp" 
-#include "ConfigParser.hpp"
+#include "Config/hpp/ConfigParser.hpp"
 #include "Config/hpp/ConfigTokenizer.hpp"
-#include "ServerConfig.hpp"
-#include "EffectiveConfig.hpp"
-#include "ConfigUtils.hpp"
+#include "Config/hpp/ServerConfig.hpp"
+#include "Config/hpp/EffectiveConfig.hpp"
+#include "Config/hpp/ConfigUtils.hpp"
 
 class Routing
 {

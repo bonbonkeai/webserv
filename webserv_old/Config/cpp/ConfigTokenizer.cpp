@@ -80,6 +80,7 @@ Token   ConfigTokenizer::get_next_token(const std::string& str, size_t& pos)
                 pos++;
                 current_col++; 
             }
+            //这个地方如果配置里一旦出现你没处理的字符，Tokenizer会直接假装文件结束，Parser 会以为配置就到这儿了，后面就全丢了？
             return Token(TYPE_COMMENT, "", tmp_line, tmp_col);
     }
     /* Avancer le caractere??? sinon boucle infini*/

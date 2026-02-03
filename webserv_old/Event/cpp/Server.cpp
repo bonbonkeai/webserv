@@ -2,6 +2,11 @@
 #include <cstring>
 #include <sys/wait.h>
 #include <sys/time.h>
+#include <vector>
+#include "Config/hpp/Routing.hpp"
+#include "Config/hpp/EffectiveConfig.hpp"
+#include "Config/hpp/ServerConfig.hpp"
+
 
 #define Timeout 50 // 50-100
 #define ALL_TIMEOUT_MS 5000ULL

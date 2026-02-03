@@ -3,6 +3,8 @@
 #include <fstream>
 #include "HTTP/hpp/ErrorResponse.hpp"
 
+//这里有很多问题，暂时没用，目前还是先以buildErrorResponse(code) 固定生成 HTML body 的方式
+
 std::string ErrorPage::load_error_file(const std::string& path)
 {
     std::ifstream file(path.c_str());

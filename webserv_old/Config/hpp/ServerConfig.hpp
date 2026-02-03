@@ -5,7 +5,7 @@
 #include <map>
 #include <vector>
 #include <cctype>
-#include "LocationConfig.hpp"
+#include "Config/hpp/LocationConfig.hpp"
 
 /* Serveur Brut(parser)*/
 struct ServerConfig

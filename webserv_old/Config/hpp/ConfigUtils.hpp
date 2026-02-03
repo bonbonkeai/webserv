@@ -5,9 +5,9 @@
 #include <cstdlib>   // for atoi
 #include <cctype>    // for std::isdigit
 #include "HTTP/hpp/HTTPResponse.hpp"
-#include "ConfigParser.hpp"
+#include "Config/hpp/ConfigParser.hpp"
 #include "Config/hpp/ConfigTokenizer.hpp"
-#include "ServerConfig.hpp"
+#include "Config/hpp/ServerConfig.hpp"
 
 class ConfigUtils
 {

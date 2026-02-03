@@ -3,10 +3,10 @@
 
 #include <string>
 #include "HTTP/hpp/HTTPResponse.hpp"
-#include "ConfigParser.hpp"
+#include "Config/hpp/ConfigParser.hpp"
 #include "Config/hpp/ConfigTokenizer.hpp"
-#include "LocationConfig.hpp"
-#include "ServerConfig.hpp"
+#include "Config/hpp/LocationConfig.hpp"
+#include "Config/hpp/ServerConfig.hpp"
 
 class ErrorPage
 {

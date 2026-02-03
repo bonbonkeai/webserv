@@ -24,26 +24,74 @@ Routing::Routing(const std::vector<ServerRuntimeConfig> &serveurs)
 // -------------------
 // Sélection du serveur correspondant au Host
 // -------------------
-const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req, int listen_port) const
+// const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req, int listen_port) const
+// {
+//     if (_serveurs.empty())
+//         throw std::runtime_error("No servers available in Routing::selectS");
+
+//     std::string host = req.headers.count("host") ? req.headers.at("host") : "";
+//     const ServerRuntimeConfig* first_port_match = NULL;
+//     for (size_t i = 0; i < _serveurs.size(); i++)
+//     {
+//         if (_serveurs[i].port != listen_port)
+//             continue;
+//         if (!first_port_match)
+//             first_port_match = &_serveurs[i];
+//         if (_serveurs[i].matchesHost(host))
+//             return _serveurs[i];
+//     }
+//     if (first_port_match)
+//         return *first_port_match;
+//     return _serveurs[0];
+// }
+const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req) const
 {
     if (_serveurs.empty())
         throw std::runtime_error("No servers available in Routing::selectS");
 
-    std::string host = req.headers.count("host") ? req.headers.at("host") : "";
-    const ServerRuntimeConfig* first_port_match = NULL;
+    // 1) header key 大小写不敏感，我都转小写了：host
+    std::string host = "";
+    std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
+    if (it != req.headers.end())
+        host = it->second;
+    else
+        host = "";
+    // 2) 去掉前后空格
+    // 这里给一个最小实现：只处理首尾空格/Tab
+    ltrimSpaces(host);
+    rtrimSpaces(host);
+    // 3) lower（避免 server_name 比较大小写不一致）
+    toLowerInPlace(host);
+    // 4) 去掉端口：处理 "example.local:8080" -> "example.local"
+    //    额外处理 IPv6: "[::1]:8080" -> "::1"
+    if (!host.empty())
+    {
+        if (host[0] == '[')
+        {
+            // IPv6 bracket form: [::1]:8080
+            std::size_t rb = host.find(']');
+            if (rb != std::string::npos)
+            {
+                host = host.substr(1, rb - 1); // 取出 ::1
+            }
+        }
+        else
+        {
+            std::size_t colon = host.find(':');
+            if (colon != std::string::npos)
+                host = host.substr(0, colon);
+        }
+    }
+    // 5) 逐 server 匹配
     for (size_t i = 0; i < _serveurs.size(); i++)
     {
-        if (_serveurs[i].port != listen_port)
-            continue;
-        if (!first_port_match)
-            first_port_match = &_serveurs[i];
         if (_serveurs[i].matchesHost(host))
             return _serveurs[i];
     }
-    if (first_port_match)
-        return *first_port_match;
-    return _serveurs[0];
+    return (_serveurs[0]); // default server
 }
+
+
 
 // -------------------
 // Retourne la location la plus spécifique (longest prefix match)
@@ -232,7 +280,8 @@ LocationRuntimeConfig buildLocationRuntime(const LocationConfig &loc, const Serv
 EffectiveConfig Routing::resolve(const HTTPRequest& req, int listen_port) const
 {
     const ServerRuntimeConfig& server = selectS(req, listen_port);
-    const LocationRuntimeConfig* loc = matchLocation(server, req.uri);
+    // const LocationRuntimeConfig* loc = matchLocation(server, req.uri);
+    const LocationRuntimeConfig* loc = matchLocation(server, req.path);
 
     EffectiveConfig cfg;
 

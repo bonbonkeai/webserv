@@ -53,6 +53,13 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
 
     loc.path = raw.path;
 
+    //
+    loc.has_root = false;
+    loc.has_autoindex = false;
+    loc.has_methodes = false;
+    loc.has_index = false;
+    //
+
     // héritage
     loc.root = srv.root;
     loc.autoindex = srv.autoindex;
@@ -61,17 +68,26 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
 
     // override
     if (ConfigUtils::hasDirective(raw.directives, "root"))
+    {
         loc.root =
             ConfigUtils::getSimpleV(raw.directives, "root");
+        loc.has_root = true;
+    }
 
     if (ConfigUtils::hasDirective(raw.directives, "autoindex"))
+    {
         loc.autoindex =
             ConfigUtils::toBool(
                 ConfigUtils::getSimpleV(raw.directives, "autoindex"));
+        loc.has_autoindex = true;
+    }
 
     if (hasDirectiveEither(raw.directives, "allowed_methods", "allow_methods"))
+    {
         loc.allow_methodes =
             getDirectiveEither(raw.directives, "allowed_methods", "allow_methods");
+        loc.allow_methodes = true;
+    }
     else
     {
         loc.allow_methodes.push_back("GET");

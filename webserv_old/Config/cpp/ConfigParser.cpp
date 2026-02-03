@@ -1,5 +1,4 @@
 #include "Config/hpp/ConfigParser.hpp"
-#include "Config/hpp/ConfigUtils.hpp"
 #include "HTTP/hpp/HTTPUtils.hpp" 
 #include <stdexcept>
 
@@ -33,7 +32,7 @@ void ConfigParser::expect(Tokentype type, const std::string& err_msg)
         );
 
     }
-    next();
+    // next();
 }
 
 // -------------------
@@ -72,7 +71,10 @@ LocationConfig ConfigParser::parse_location()
 {
     LocationConfig loc;
 
-    expect(TYPE_WORD, "Expected 'location'");
+    // expect(TYPE_WORD, "Expected 'location'");
+    if (current().type != TYPE_WORD || current().value != "location")
+        throw std::runtime_error("'location' expected at line " + toString(current().line));
+    next();
 
     // Path
     if (current().type != TYPE_WORD)
