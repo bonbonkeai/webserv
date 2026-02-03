@@ -79,12 +79,18 @@ HTTPRequest::~HTTPRequest() {}
 bool HTTPRequest::is_cgi_request() const
 {
     // return (false);
-    return (path.compare(0, 9, "/cgi-bin/") == 0);
+    if (path.size() >= 3 && path.compare(path.size()-3, 3, ".py") == 0)
+        return true;
+    if (path.size() >= 4 && path.compare(path.size()-4, 4, ".php") == 0)
+        return true;
+    if (path.size() >= 4 && path.compare(path.size()-4, 4, ".cgi") == 0)
+        return true;
     //
     // ps:后续要接入config,那就需要在 EffectiveConfig 里加一项->例如 cgi_pass 或 cgi_extensions, 然后
     // location/server 配置里存 cgi_*
     // resolve 后写进 req.effective
     // is_cgi_request() 读 effective 决策
-    // 但现在的 EffectiveConfig.hpp 里还没有 CGI 相关字段，所以先做 path 前缀规则。
+    // 但现在的 EffectiveConfig.hpp 里还没有 CGI 相关字段，所以先按扩展名：.py .php .cgi
+    // 按 location directive：某些 location 标记为 cgi on。
     //
 }

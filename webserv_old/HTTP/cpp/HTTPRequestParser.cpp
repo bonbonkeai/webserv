@@ -205,6 +205,12 @@ bool	HTTPRequestParser::parseRequestLine()
 	std::istringstream iss(line);
 	iss >> _req.method >> _req.uri >> _req.version;
 
+    //
+    std::string extra;
+    if (!iss  || (iss >> extra))
+        return fail(400);
+    //
+
     static const std::size_t MAX_URI_LENGTH = 4096;
 	if (!isTokenUpperAlpha(_req.method))
 		return (fail(400));
@@ -268,6 +274,13 @@ bool	HTTPRequestParser::parseRequestLine()
     }
 	_req.keep_alive = true;
 	splitUri();
+    //
+    // if (!percentDecodePath(_req.path))
+    //     return fail(400);
+    // int norm = normalizePathInPlace(_req.path); // 0 ok, 403 out-of-root
+    // if (norm == 403)
+    //     return fail(403);
+    //
     _chunk_waiting_size = true;
     _chunk_expected_size = 0;
 	_state = WAIT_HEADERS;
@@ -323,15 +336,34 @@ bool HTTPRequestParser::parseHeaders()
                 _chunk_expected_size = 0;
             }
             // connection: close 覆写 keep-alive
+            // if (_req.headers.count("connection"))
+            // {
+            //     std::string conn = _req.headers["connection"];
+            //     toLowerInPlace(conn);
+            //     ltrimSpaces(conn);
+            //     rtrimSpaces(conn);
+            //     if (conn == "close")
+            //         _req.keep_alive = false;
+            // }
             if (_req.headers.count("connection"))
             {
                 std::string conn = _req.headers["connection"];
                 toLowerInPlace(conn);
-                ltrimSpaces(conn);
-                rtrimSpaces(conn);
-                if (conn == "close")
+
+                bool seen_close = false;
+                std::stringstream ss(conn);
+                std::string tok;
+                while (std::getline(ss, tok, ','))
+                {
+                    ltrimSpaces(tok);
+                    rtrimSpaces(tok);
+                    if (tok == "close")
+                        seen_close = true;
+                }
+                if (seen_close)
                     _req.keep_alive = false;
             }
+
             _state = _req.has_body ? WAIT_BODY : PARSE_DONE;
             if (_state == PARSE_DONE)
                 _req.complet = true;
@@ -354,8 +386,10 @@ bool HTTPRequestParser::parseHeaders()
         //5)Host 唯一性（重复 host -> 400）
         if (key == "host")
         {
-            // if (_req.headers.count("host"))
-            //     return (fail(400));
+            //
+            if (val.empty())
+                return (fail(400));
+            //
             // 1) Host 头重复 -> 400
             if (_req.headers.count("host"))
                 return (fail(400));
