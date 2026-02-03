@@ -49,7 +49,7 @@ struct ServerRuntimeConfig
                 rhs[i] = static_cast<char>(std::tolower(rhs[i]));
             return lhs == rhs;
         }
-        return true;
+        return (true);
     }
 };
 

@@ -53,61 +53,136 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
 
     loc.path = raw.path;
 
-    //
-    loc.has_root = false;
-    loc.has_autoindex = false;
-    loc.has_methodes = false;
-    loc.has_index = false;
-    //
-
     // héritage
     loc.root = srv.root;
+    loc.has_root = false;
     loc.autoindex = srv.autoindex;
-    loc.allow_methodes.clear();
+    loc.has_autoindex = false;
+    loc.allow_methodes = srv.allowed_methods;
+    loc.has_methodes = false;
     loc.client_max_body_size = srv.client__max_body_size;
+    loc.has_client_max_body_size = false;
+    loc.index = srv.index;
+    loc.has_index = false;
+
 
     // override
+    if (ConfigUtils::hasDirective(raw.directives, "index"))
+    {
+        loc.index = ConfigUtils::getV(raw.directives, "index");
+        loc.has_index = true;
+    }
     if (ConfigUtils::hasDirective(raw.directives, "root"))
     {
-        loc.root =
-            ConfigUtils::getSimpleV(raw.directives, "root");
+        loc.root = ConfigUtils::getSimpleV(raw.directives, "root");
         loc.has_root = true;
     }
-
     if (ConfigUtils::hasDirective(raw.directives, "autoindex"))
     {
-        loc.autoindex =
-            ConfigUtils::toBool(
-                ConfigUtils::getSimpleV(raw.directives, "autoindex"));
+        loc.autoindex = ConfigUtils::toBool(ConfigUtils::getSimpleV(raw.directives, "autoindex"));
         loc.has_autoindex = true;
     }
-
     if (hasDirectiveEither(raw.directives, "allowed_methods", "allow_methods"))
     {
-        loc.allow_methodes =
-            getDirectiveEither(raw.directives, "allowed_methods", "allow_methods");
-        loc.allow_methodes = true;
+        loc.allow_methodes = getDirectiveEither(raw.directives, "allowed_methods", "allow_methods");
+        loc.has_methodes = true;
     }
     else
     {
+        loc.allow_methodes.clear();
         loc.allow_methodes.push_back("GET");
         loc.allow_methodes.push_back("POST");
         loc.allow_methodes.push_back("DELETE");
+        loc.has_methodes = false;
     }
-
     if (ConfigUtils::hasDirective(raw.directives, "client_max_body_size"))
-        loc.client_max_body_size =
-            ConfigUtils::toSize(ConfigUtils::getSimpleV(raw.directives, "client_max_body_size"));
-
+    {
+        loc.client_max_body_size = ConfigUtils::toSize(ConfigUtils::getSimpleV(raw.directives, "client_max_body_size"));
+        loc.has_client_max_body_size = true;
+    }
     loc.has_return = false;
     loc.return_code = 302;
     loc.return_url.clear();
+    if (ConfigUtils::hasDirective(raw.directives, "return"))
+    {
+        std::vector<std::string> values = ConfigUtils::getV(raw.directives, "return");
+        if (!values.empty())
+        {
+            if (isNumberString(values[0]))
+            {
+                loc.return_code = ConfigUtils::toInt(values[0]);
+                if (values.size() >= 2)
+                    loc.return_url = values[1];
+            }
+            else
+            {
+                loc.return_code = 302;
+                loc.return_url = values[0];
+            }
+            if (!loc.return_url.empty())
+                loc.has_return = true;
+        }
+    }
+
+    // --- cgi ---
     loc.has_cgi = false;
     loc.cgi_exec.clear();
+    if (ConfigUtils::hasDirective(raw.directives, "cgi"))
+    {
+        std::vector<std::string> values = ConfigUtils::getV(raw.directives, "cgi");
+        for (size_t i = 0; i + 1 < values.size(); i += 2)
+        {
+            std::string ext = values[i];
+            std::string exec = values[i + 1];
+            if (!ext.empty())
+                loc.cgi_exec[ext] = exec;
+        }
+        if (!loc.cgi_exec.empty())
+            loc.has_cgi = true;
+    }
+
+    // --- error_page ---
     loc.has_error_pages = false;
     loc.error_pages.clear();
-
-    return loc;
+    if (ConfigUtils::hasDirective(raw.directives, "error_page"))
+    {
+        std::vector<std::string> values = ConfigUtils::getV(raw.directives, "error_page");
+        if (values.size() >= 2)
+        {
+            bool override_set = false;
+            int override_code = 0;
+            size_t idx = 0;
+            std::vector<int> codes;
+            for (; idx < values.size(); ++idx)
+            {
+                if (!values[idx].empty() && values[idx][0] == '=')
+                {
+                    override_set = true;
+                    if (values[idx].size() > 1)
+                        override_code = ConfigUtils::toInt(values[idx].substr(1));
+                    ++idx;
+                    break;
+                }
+                if (!isNumberString(values[idx]))
+                    break;
+                codes.push_back(ConfigUtils::toInt(values[idx]));
+            }
+            if (!codes.empty() && idx < values.size())
+            {
+                std::string uri = values[idx];
+                for (size_t i = 0; i < codes.size(); ++i)
+                {
+                    ErrorPageRule rule;
+                    rule.uri = uri;
+                    rule.override_set = override_set;
+                    rule.override_code = override_code;
+                    loc.error_pages[codes[i]] = rule;
+                }
+                loc.has_error_pages = !loc.error_pages.empty();
+            }
+        }
+    }
+    return (loc);
 }
 
 
@@ -204,7 +279,6 @@ ServerRuntimeConfig buildServer(const ServerConfig& raw)
             }
         }
     }
-
     return srv;
 }
 
@@ -216,7 +290,7 @@ std::vector<ServerRuntimeConfig> buildRuntime(const std::vector<ServerConfig>& r
         ServerRuntimeConfig srv = buildServer(raw[i]);
         srv.locations.clear();
         for (size_t j = 0; j < raw[i].locations.size(); ++j)
-            srv.locations.push_back(buildLocationRuntime(raw[i].locations[j], srv));
+            srv.locations.push_back(buildLocation(srv, raw[i].locations[j]));
         out.push_back(srv);
     }
     return out;

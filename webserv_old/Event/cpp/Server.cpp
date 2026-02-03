@@ -531,7 +531,7 @@ void Server::run()
                             // 1) resolve effective config
                             if (_routing)
                             {
-                                req.effective = _routing->resolve(req);
+                                req.effective = _routing->resolve(req, port_nbr);
                                 req.max_body_size = req.effective.max_body_size;
                                 req.has_effective = true;
                             }

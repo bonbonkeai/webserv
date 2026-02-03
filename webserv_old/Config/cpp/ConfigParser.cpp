@@ -32,7 +32,7 @@ void ConfigParser::expect(Tokentype type, const std::string& err_msg)
         );
 
     }
-    // next();
+    next();
 }
 
 // -------------------

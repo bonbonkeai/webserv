@@ -26,7 +26,7 @@ struct EffectiveConfig
 };
 
 ServerRuntimeConfig buildServer(const ServerConfig& raw);
-LocationRuntimeConfig buildLocationRuntime(const LocationConfig& loc, const ServerRuntimeConfig& server);
 std::vector<ServerRuntimeConfig> buildRuntime(const std::vector<ServerConfig>& raw);
+LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const LocationConfig& raw)
 
 #endif
