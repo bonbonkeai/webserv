@@ -15,7 +15,7 @@ HTTPResponse GetRequest::handle()
     const std::string ROOT = _req.effective.root;
     // const bool AUTO_INDEX = true; // MVP 写死，后面接 config 替换
     const bool AUTO_INDEX = _req.effective.autoindex;
-    const std::string INDEX_NAME = "index.html";
+    std::string INDEX_NAME = "index.html";
     if (!_req.effective.index.empty())
         INDEX_NAME = _req.effective.index[0];
     

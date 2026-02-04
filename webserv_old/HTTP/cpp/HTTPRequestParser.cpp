@@ -34,12 +34,20 @@ const HTTPRequest&	HTTPRequestParser::getRequest() const
 	return (_req);
 }
 
-// void HTTPRequestParser::reset()
-// {
-//     _req = HTTPRequest();//重置所有字段与 flags
-//     _state = WAIT_REQUEST_LINE;
-//     _buffer.clear();
-// }
+void HTTPRequestParser::resetForNextRequest()
+{
+    //不清 _buffer，让 pipelined 的下一条请求留着继续解析
+    _req = HTTPRequest();
+    _state = WAIT_REQUEST_LINE;
+    _chunk_waiting_size = true;
+    _chunk_expected_size = 0;
+}
+
+bool HTTPRequestParser::hasBufferedData() const
+{
+    return (!_buffer.empty());
+}
+
 void HTTPRequestParser::reset()
 {
     _req = HTTPRequest();
@@ -114,32 +122,6 @@ bool HTTPRequestParser::isValidHeaderName(const std::string& key)
     return (true);
 }
 
-//严格解析Content-Length: 纯数字、无符号、无溢出
-//max_body可先传一个很大的值，之后用config的client_max_body_size
-// bool HTTPRequestParser::parseContentLengthStrict(const std::string& v, std::size_t& out, std::size_t max_body)
-// {
-//     if (v.empty())
-//         return (false);
-//     std::size_t acc = 0;
-//     for (std::size_t i = 0; i < v.size(); ++i)
-//     {
-//         char c = v[i];
-//         if (c < '0' || c > '9')
-//             return (false);
-//         std::size_t digit = static_cast<std::size_t>(c - '0');
-
-//         //acc = acc * 10 + digit;之前做溢出保护
-//         if (acc > (static_cast<std::size_t>(-1) - digit) / 10)
-//             return (false);
-//         acc = acc * 10 + digit;
-
-//         //做上限拦截（防止读超大 body）
-//         if (acc > max_body)
-//             return (false); //之后返回特殊状态改成413
-//     }
-//     out = acc;
-//     return (true);
-// }
 int HTTPRequestParser::parseContentLengthStrict(const std::string& v, std::size_t& out, std::size_t max_body)
 {
     if (v.empty())
@@ -163,19 +145,6 @@ int HTTPRequestParser::parseContentLengthStrict(const std::string& v, std::size_
     return (0);
 }
 
-
-// bool HTTPRequestParser::fail(int code)
-// {
-// 	//暂时都用400
-//     _req.bad_request = true;
-//     if (code > 0)
-// 		_req.error_code = code;
-// 	else
-// 		_req.error_code = 400;
-//     _req.complet = true;
-//     _state = PARSE_DONE;
-//     return (false);
-// }
 bool HTTPRequestParser::fail(int code)
 {
     _req.bad_request = true;
@@ -190,8 +159,6 @@ bool HTTPRequestParser::fail(int code)
     _chunk_expected_size = 0;
     return (false);
 }
-
-
 
 bool	HTTPRequestParser::parseRequestLine()
 {

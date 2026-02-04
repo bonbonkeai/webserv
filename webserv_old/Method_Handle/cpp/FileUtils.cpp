@@ -14,16 +14,29 @@ bool FileUtils::isSafePath(const std::string& urlPath)
     return (true);
 }
 
-std::string FileUtils::joinPath(const std::string& root, const std::string& urlPath)
-{
-    if (root.empty())
-        return (urlPath);
-    if (urlPath.empty())
-        return (root);
+// std::string FileUtils::joinPath(const std::string& root, const std::string& urlPath)
+// {
+//     if (root.empty())
+//         return (urlPath);
+//     if (urlPath.empty())
+//         return (root);
 
-    if (root[root.size() - 1] == '/')
-        return (root.substr(0, root.size() - 1) + urlPath);
-    return (root + urlPath);
+//     if (root[root.size() - 1] == '/')
+//         return (root.substr(0, root.size() - 1) + urlPath);
+//     return (root + urlPath);
+// }
+std::string FileUtils::joinPath(const std::string& a, const std::string& b)
+{
+    std::string bb = b;
+    while (!bb.empty() && bb[0] == '/')
+        bb.erase(0, 1);
+    if (a.empty())
+        return bb;
+    if (bb.empty())
+        return a;
+    if (a[a.size() - 1] == '/')
+        return a + bb;
+    return (a + "/" + bb);
 }
 
 bool FileUtils::exists(const std::string& path)

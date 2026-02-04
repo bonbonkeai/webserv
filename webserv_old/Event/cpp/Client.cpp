@@ -39,7 +39,8 @@ void Client::reset()
     write_buffer.clear();
     write_pos = 0;
     is_keep_alive = false;
-    parser.reset();
+    // parser.reset();
+    parser.resetForNextRequest();
     is_cgi = false;
     last_activity_ms = now_ms();
     if (_cgi)

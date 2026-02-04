@@ -63,6 +63,8 @@ public:
 		const HTTPRequest&	getRequest() const;
 		bool	dejaParse(const std::string &newData);
 		void	reset();
+		void	resetForNextRequest();
+		bool	hasBufferedData() const; 
 
 private:
 		HTTPRequest	_req;

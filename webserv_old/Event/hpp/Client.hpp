@@ -6,6 +6,7 @@
 #include "HTTP/hpp/HTTPRequestParser.hpp"
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "CGI/hpp/CGIProcess.hpp"
+#include "Config/hpp/Routing.hpp"
 #include <iostream>
 #include <map>
 #include <iterator>

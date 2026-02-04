@@ -3,9 +3,6 @@
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <vector>
-#include "Config/hpp/Routing.hpp"
-#include "Config/hpp/EffectiveConfig.hpp"
-#include "Config/hpp/ServerConfig.hpp"
 
 
 #define Timeout 50 // 50-100
@@ -440,6 +437,59 @@ void Server::check_timeout()
     return false;
 }
 
+bool Server::buildRespForCompletedReq(Client& c, int fd)
+{
+    HTTPRequest req = c.parser.getRequest();
+
+    // resolve effective config
+    if (_routing)
+    {
+        req.effective = _routing->resolve(req, port_nbr);
+        req.max_body_size = req.effective.max_body_size;
+        req.has_effective = true;
+    }
+    else
+    {
+        req.effective = _default_cfg;
+        req.has_effective = true;
+    }
+    // 405 global
+    if (!isMethodAllowed(req.method, req.effective.allowed_methods))
+    {
+        HTTPResponse err = buildErrorResponse(405);
+        bool ka = computeKeepAlive(req, 405);
+        c.is_keep_alive = ka;
+        applyConnectionHeader(err, ka);
+        c.write_buffer = ResponseBuilder::build(err);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return (true);
+    }
+    // CGI
+    if (req.is_cgi_request())
+    {
+        c._cgi = new CGI_Process();
+        std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
+        c._cgi->execute(scriptPath, req);
+        c.is_cgi = true;
+        _epoller->add_event(c._cgi->_read_fd, EPOLLIN | EPOLLET);
+        _manager->bind_cgi_fd(c._cgi->_read_fd, c.client_fd);
+        return (true);
+    }
+
+    // normal
+    HTTPResponse resp = process_request(req);
+    bool ka = computeKeepAlive(req, resp.statusCode);
+    c.is_keep_alive = ka;
+    applyConnectionHeader(resp, ka);
+    c.write_buffer = ResponseBuilder::build(resp);
+    c.write_pos = 0;
+    c._state = WRITING;
+    _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+    return (true);
+}
+
 void Server::run()
 {
     set_non_block_fd(socketfd);
@@ -481,103 +531,11 @@ void Server::run()
                 {
                     if (do_read(*c))
                     {
-                        // if (c->_state == PROCESS)
-                        // {
-                        //     HTTPRequest req = c->parser.getRequest();
-                        //     HTTPResponse resp = process_request(req);
-
-                        //     // session a tester
-                        //     // std::string session_id;
-                        //     //// check if is session
-                        //     // if (req.headers.find("Cookie") != req.headers.end())
-                        //     //{
-                        //     //     session_id = req.headers["Cookie"];
-                        //     //     size_t pos = session_id.find("session_id=");
-                        //     //     if (pos != std::string::npos)
-                        //     //     {
-                        //     //         size_t pos_end = session_id.find(";", pos);
-                        //     //         session_id = session_id.substr(pos + 11, pos_end - (pos + 11));
-                        //     //     }
-                        //     // }
-                        //     // Session *session;
-                        //     // bool is_new;
-                        //     // session = _session_cookie->get_session(session_id, is_new);
-                        //     // if (is_new == true)
-                        //     //     resp.headers["Set-Cookie"] = "session_id=" + session->_id + "; Path=/; HttpOnly";
-                        //     //  cgi process request
-                        //     if (req.is_cgi_request())
-                        //     {
-                        //         TRACE();
-                        //         c->_cgi = new CGI_Process();
-                        //         c->_cgi->execute("./www" + req.path, const_cast<HTTPRequest &>(req));
-                        //         c->is_cgi = true;
-
-                        //         _epoller->add_event(c->_cgi->_read_fd, EPOLLIN | EPOLLET);
-                        //         _manager->bind_cgi_fd(c->_cgi->_read_fd, c->client_fd);
-                        //         continue;
-                        //     }
-                        //     // c->is_keep_alive = req.keep_alive;
-                        //     // keep-alive
-                        //     bool ka = computeKeepAlive(req, resp.statusCode);
-                        //     c->is_keep_alive = ka;
-                        //     applyConnectionHeader(resp, ka);
-
-                        //     c->write_buffer = ResponseBuilder::build(resp);
-                        //     c->write_pos = 0;
-                        // }
                         if (c->_state == PROCESS)
                         {
-                            HTTPRequest req = c->parser.getRequest();
-                            // 1) resolve effective config
-                            if (_routing)
-                            {
-                                req.effective = _routing->resolve(req, port_nbr);
-                                req.max_body_size = req.effective.max_body_size;
-                                req.has_effective = true;
-                            }
-                            else
-                            {
-                                req.effective = _default_cfg;
-                                req.has_effective = true;
-                            }
-                            // 2) 统一做 allowed_methods -> 405（避免每个 handler 重复写）
-                            if (!isMethodAllowed(req.method, req.effective.allowed_methods))
-                            {
-                                HTTPResponse err = buildErrorResponse(405);
-                                bool ka = computeKeepAlive(req, 405);
-                                c->is_keep_alive = ka;
-                                applyConnectionHeader(err, ka);
-                                c->write_buffer = ResponseBuilder::build(err);
-                                c->write_pos = 0;
-                                c->_state = WRITING;
-                                _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
-                                continue;
-                            }
-
-                            // 3) CGI：用 cfg.root 拼真实路径
-                            if (req.is_cgi_request())
-                            {
-                                c->_cgi = new CGI_Process();
-                                std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
-                                c->_cgi->execute(scriptPath, req); 
-                                c->is_cgi = true;
-
-                                _epoller->add_event(c->_cgi->_read_fd, EPOLLIN | EPOLLET);
-                                _manager->bind_cgi_fd(c->_cgi->_read_fd, c->client_fd);
-                                continue;
-                            }
-
-                            // 4) 普通 handler
-                            HTTPResponse resp = process_request(req);
-
-                            bool ka = computeKeepAlive(req, resp.statusCode);
-                            c->is_keep_alive = ka;
-                            applyConnectionHeader(resp, ka);
-
-                            c->write_buffer = ResponseBuilder::build(resp);
-                            c->write_pos = 0;
+                            buildRespForCompletedReq(*c, fd);
+                            continue;
                         }
-
                         if (!c->is_cgi)
                         {
                             c->_state = WRITING;
@@ -588,19 +546,52 @@ void Server::run()
                 if (events & EPOLLOUT)
                 {
                     TRACE();
-                    if (do_write(*c))
+                    // do_write == false: 只是 EAGAIN，还没写完，继续等下一次 EPOLLOUT
+                    if (!do_write(*c))
+                        continue;
+                    // do_write == true: 本次 response 已经全部写完
+                    if (!c->is_keep_alive)
                     {
-                        if (c->is_keep_alive)
+                        _manager->remove_socket_client(fd);
+                        _epoller->del_event(fd);
+                        close(fd);
+                        continue;
+                    }
+                    // keep-alive: reset 当前 request 状态，但必须保留 parser 内部 buffer
+                    // c->parser.resetForNextRequest(); // 前提：不清 _buffer，只清 request/state
+                    c->reset();
+                    // 如果 buffer 里已经有 pipelined 数据，尝试直接解析下一条
+                    while (!c->is_cgi && c->parser.hasBufferedData())
+                    {
+                        bool ok = c->parser.dejaParse(std::string());
+                        if (!ok && c->parser.getRequest().bad_request)
                         {
-                            c->reset();
-                            _epoller->modif_event(fd, EPOLLIN | EPOLLET);
+                            const HTTPRequest &rq = c->parser.getRequest();
+                            int code = rq.error_code > 0 ? rq.error_code : 400;
+                            HTTPResponse err = buildErrorResponse(code);
+                            bool ka = computeKeepAlive(rq, code);
+                            c->is_keep_alive = ka;
+                            applyConnectionHeader(err, ka);
+                            c->write_buffer = ResponseBuilder::build(err);
+                            c->write_pos = 0;
+                            c->_state = WRITING;
+                            _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+                            break; // 下次 EPOLLOUT 发送 err
                         }
-                        else
-                        {
-                            _manager->remove_socket_client(fd);
-                            _epoller->del_event(fd);
-                            close(fd);
-                        }
+                        if (!c->parser.getRequest().complet)
+                            break; // 还缺字节，回去等 EPOLLIN
+                        c->_state = PROCESS;
+                        buildRespForCompletedReq(*c, fd); // 这个函数内部应该把 state=WRITING 并 modif_event(EPOLLOUT)
+                        break; // 一次只准备一个 response，保持顺序
+                    }
+                    // 没准备出新 response，就回去读
+                    if (!c->is_cgi && (c->_state != WRITING || c->write_buffer.empty()))
+                        _epoller->modif_event(fd, EPOLLIN | EPOLLET);
+                    else
+                    {
+                        _manager->remove_socket_client(fd);
+                        _epoller->del_event(fd);
+                        close(fd);
                     }
                 }
                 if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
@@ -645,10 +636,8 @@ bool Server::load_config(const std::string& path)
     ConfigTokenizer tok;
     if (!tok.read_file(path))
         throw std::runtime_error("config: cannot read file");
-
     ConfigParser parser(tok.getTokens());
     std::vector<ServerConfig> raw = parser.parse();
-
     _rt_servers.clear();
     for (size_t i = 0; i < raw.size(); ++i)
     {
@@ -660,7 +649,6 @@ bool Server::load_config(const std::string& path)
         }
         _rt_servers.push_back(srv);
     }
-
     if (_routing)
     {
         delete _routing;
@@ -668,7 +656,6 @@ bool Server::load_config(const std::string& path)
     }
     if (!_rt_servers.empty())
         _routing = new Routing(_rt_servers);
-
     if (_rt_servers.empty())
         throw std::runtime_error("config: no server block found");
     // 默认 cfg：用于“还没解析 Host 时”的兜底
@@ -678,7 +665,6 @@ bool Server::load_config(const std::string& path)
     _default_cfg.autoindex = _rt_servers[0].autoindex;
     _default_cfg.allowed_methods = _rt_servers[0].allowed_methods;
     _default_cfg.error_pages = _rt_servers[0].error_page;
-    
     _default_cfg.max_body_size = _rt_servers[0].client__max_body_size;
-    return true;
+    return (true);
 }

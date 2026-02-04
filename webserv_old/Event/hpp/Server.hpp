@@ -8,7 +8,10 @@
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "HTTP/hpp/RequestFactory.hpp"
 #include "HTTP/hpp/Session.hpp"
-
+#include "Config/hpp/Routing.hpp"
+#include "Config/hpp/EffectiveConfig.hpp"
+#include "Config/hpp/ServerConfig.hpp"
+#include "Method_Handle/hpp/FileUtils.hpp"
 #include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -56,6 +59,7 @@ public:
     void    cleanup();
     // void process_request(Client &c);
 
+    bool buildRespForCompletedReq(Client& c, int fd);
     bool load_config(const std::string& path);
 private:
     // class de tous les configuration de server
