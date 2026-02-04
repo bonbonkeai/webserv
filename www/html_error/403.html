@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>403 - Access Forbidden</title>
+    <style>
+        :root {
+            --alert-color: #e74c3c; /* 警示红 */
+            --text-dark: #2c3e50;
+            --text-light: #7f8c8d;
+            --bg-color: #fdfdfd;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-dark);
+        }
+
+        .content {
+            text-align: center;
+            padding: 2rem;
+            max-width: 500px;
+        }
+
+        /* 锁图标的简易视觉表达 */
+        .icon {
+            font-size: 5rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .error-code {
+            font-size: 8rem;
+            font-weight: 900;
+            color: var(--alert-color);
+            line-height: 1;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+        }
+
+        p {
+            font-size: 1rem;
+            color: var(--text-light);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .btn {
+            display: inline-block;
+            text-decoration: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-weight: 600;
+            background-color: var(--text-dark);
+            color: white;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #000;
+            transform: translateY(-2px);
+        }
+
+        /* 简单的禁入动画 */
+        .shake {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="content shake">
+        <span class="icon">🚫</span>
+        <div class="error-code">403</div>
+        <h1>Access Forbidden</h1>
+        <p>Sorry, you don't have permission to access this resource. Please check your credentials or contact the administrator.</p>
+        
+        <a href="/" class="btn">Back to Safety</a>
+    </div>
+
+</body>
+</html>
