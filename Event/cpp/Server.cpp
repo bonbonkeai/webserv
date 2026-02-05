@@ -38,17 +38,17 @@ static void applyConnectionHeader(HTTPResponse &resp, bool keepAlive)
     resp.headers["connection"] = keepAlive ? "keep-alive" : "close";
 }
 
-static void terminateCgiOnce(CGI_Process *cgi)
-{
-    if (!cgi)
-        return;
-    if (cgi->_pid > 0)
-    {
-        kill(cgi->_pid, SIGKILL);
-        waitpid(cgi->_pid, NULL, 0);
-        cgi->_pid = -1; // 关键：防止后续任何路径重复 kill
-    }
-}
+//static void terminateCgiOnce(CGI_Process *cgi)
+//{
+//    if (!cgi)
+//        return;
+//    if (cgi->_pid > 0)
+//    {
+//        kill(cgi->_pid, SIGKILL);
+//        waitpid(cgi->_pid, NULL, 0);
+//        cgi->_pid = -1; // 关键：防止后续任何路径重复 kill
+//    }
+//}
 
 // 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
 Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
@@ -129,11 +129,7 @@ bool Server::handle_connection()
         socklen_t client_len = sizeof(clientaddr);
         int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
         if (connect_fd < 0)
-        {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                return true;
-            return false;
-        }
+            return true;
         Server::set_non_block_fd(connect_fd);
         _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
         _manager->add_socket_client(connect_fd); // client state is read_line
@@ -145,6 +141,30 @@ bool Server::handle_connection()
     }
     return true;
 }
+// bool Server::handle_connection()
+//{
+//     while (true)
+//     {
+//         struct sockaddr_in clientaddr;
+//         socklen_t client_len = sizeof(clientaddr);
+//         int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
+//         if (connect_fd < 0)
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 return true;
+//             return false;
+//         }
+//         Server::set_non_block_fd(connect_fd);
+//         _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
+//         _manager->add_socket_client(connect_fd); // client state is read_line
+//         // 这里面更新时间没有必要，因为add socket client的时候，client construit的时候就已经有一个时间设置了
+//         // Client *c = _manager->get_socket_client_by_fd(connect_fd);
+//         // if (c)
+//         //     c->last_activity_ms = Client::now_ms();
+//         //
+//     }
+//     return true;
+// }
 
 HTTPResponse Server::process_request(const HTTPRequest &req)
 {
@@ -153,7 +173,6 @@ HTTPResponse Server::process_request(const HTTPRequest &req)
     delete h;
     return (resp);
 }
-
 bool Server::do_read(Client &c)
 {
     char tmp[4096];
@@ -177,19 +196,14 @@ bool Server::do_read(Client &c)
                 c.write_pos = 0;
                 return (true);
             }
+            continue;
         }
         else if (n == 0)
         {
             c._state = CLOSED;
             return (false);
         }
-        else
-        {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                break;
-            c._state = ERROR;
-            return (false);
-        }
+        break;
     }
     if (c.parser.getRequest().complet)
     {
@@ -199,24 +213,69 @@ bool Server::do_read(Client &c)
     return (false);
 }
 
-void Server::handle_cgi_read_error(Client &c, int pipe_fd)
-{
-    // 1) 终止 CGI（只做一次）
-    terminateCgiOnce(c._cgi);
-    // 2) 清理 pipe（只通过 del_cgi_fd 关闭 fd/归零 is_cgi）
-    _epoller->del_event(pipe_fd);
-    _manager->del_cgi_fd(pipe_fd);
-    // 3) 构造错误响应并切 WRITING
-    const HTTPRequest &req = c.parser.getRequest();
-    HTTPResponse err = buildErrorResponse(500);
-    bool ka = computeKeepAlive(req, 500);
-    c.is_keep_alive = ka;
-    applyConnectionHeader(err, ka);
-    c.write_buffer = ResponseBuilder::build(err);
-    c.write_pos = 0;
-    c._state = WRITING;
-    _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
-}
+// bool Server::do_read(Client &c)
+//{
+//     char tmp[4096];
+//     while (true)
+//     {
+//         ssize_t n = recv(c.get_fd(), tmp, sizeof(tmp), 0);
+//         if (n > 0)
+//         {
+//             c.last_activity_ms = Client::now_ms();
+//             bool ok = c.parser.dejaParse(std::string(tmp, n));
+//             if (!ok && c.parser.getRequest().bad_request)
+//             {
+//                 c._state = ERROR;
+//                 const HTTPRequest &req = c.parser.getRequest();
+//                 int code = req.error_code > 0 ? req.error_code : 400;
+//                 HTTPResponse err = buildErrorResponse(code);
+//                 bool ka = computeKeepAlive(req, code);
+//                 c.is_keep_alive = ka;
+//                 applyConnectionHeader(err, ka);
+//                 c.write_buffer = ResponseBuilder::build(err);
+//                 c.write_pos = 0;
+//                 return (true);
+//             }
+//         }
+//         else if (n == 0)
+//         {
+//             c._state = CLOSED;
+//             return (false);
+//         }
+//         else
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 break;
+//             c._state = ERROR;
+//             return (false);
+//         }
+//     }
+//     if (c.parser.getRequest().complet)
+//     {
+//         c._state = PROCESS;
+//         return (true);
+//     }
+//     return (false);
+// }
+
+// void Server::handle_cgi_read_error(Client &c, int pipe_fd)
+//{
+//     // 1) 终止 CGI（只做一次）
+//     terminateCgiOnce(c._cgi);
+//     // 2) 清理 pipe（只通过 del_cgi_fd 关闭 fd/归零 is_cgi）
+//     _epoller->del_event(pipe_fd);
+//     _manager->del_cgi_fd(pipe_fd);
+//     // 3) 构造错误响应并切 WRITING
+//     const HTTPRequest &req = c.parser.getRequest();
+//     HTTPResponse err = buildErrorResponse(500);
+//     bool ka = computeKeepAlive(req, 500);
+//     c.is_keep_alive = ka;
+//     applyConnectionHeader(err, ka);
+//     c.write_buffer = ResponseBuilder::build(err);
+//     c.write_pos = 0;
+//     c._state = WRITING;
+//     _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+// }
 
 void Server::handle_cgi_read(Client &c, int pipe_fd)
 {
@@ -349,7 +408,7 @@ void Server::handle_socket_error(int fd)
         return;
 
     if (c->is_cgi)
-        terminateCgiOnce(c->_cgi);
+        c->_cgi->terminate();
 
     _epoller->del_event(fd);
     _manager->remove_socket_client(fd);
@@ -369,18 +428,32 @@ bool Server::do_write(Client &c)
     {
         ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
         if (n > 0)
-            c.write_pos += n;
-        else
         {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                return (false);
-            c.is_keep_alive = false; // <- 强制关
-            // c._state = ERROR;
-            return (true);
+            c.write_pos += n;
+            continue;
         }
+        return false;
     }
     return (true); // 写完
 }
+// bool Server::do_write(Client &c)
+//{
+//     while (c.write_pos < c.write_buffer.size())
+//     {
+//         ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
+//         if (n > 0)
+//             c.write_pos += n;
+//         else
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 return (false);
+//             c.is_keep_alive = false; // <- 强制关
+//             // c._state = ERROR;
+//             return (true);
+//         }
+//     }
+//     return (true); // 写完
+// }
 
 void Server::check_cgi_timeout()
 {

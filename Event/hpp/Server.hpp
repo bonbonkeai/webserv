@@ -43,7 +43,7 @@ public:
     void handle_socket_error(int fd);
 
     void handle_cgi_read(Client &c, int pipe_fd);
-    void handle_cgi_read_error(Client &c, int pipe_fd);
+    //void handle_cgi_read_error(Client &c, int pipe_fd);
 
     bool do_read(Client &c);
     bool do_write(Client &c);
