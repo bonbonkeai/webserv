@@ -266,6 +266,10 @@ bool CGI_Process::check_timeout(unsigned long long now, unsigned long long timeo
 
 bool CGI_Process::handle_output()
 {
+    if (_read_fd < 0)
+        return true;
+    if (_state == TIMEOUT || _state == ERROR_CGI)
+        return true;
     char buf[4096];
 
     while (true)
