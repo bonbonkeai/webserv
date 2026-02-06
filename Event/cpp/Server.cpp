@@ -400,11 +400,11 @@ void Server::handle_pipe_error(int fd)
 }
 void Server::finalize_cgi_response(Client &c, int pipe_fd)
 {
-    if (c._cgi) // 读取剩下的内容
-    {
-        c._cgi->handle_output();
-        c._cgi->get_exit_status();
-    }
+    //if (c._cgi) // 读取剩下的内容
+    //{
+    //    c._cgi->handle_output();
+    //    c._cgi->get_exit_status();
+    //}
 
     bool keep_alive = c.parser.getRequest().keep_alive;
     HTTPResponse resp;
