@@ -178,3 +178,17 @@ void ClientManager::bind_cgi_fd(int pipe_fd, int client_fd)
     if (c->_cgi)
         c->_cgi->_read_fd = pipe_fd;
 }
+
+void    ClientManager::clear_all_clients()
+{
+    for(std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+    {
+        delete it->second;
+    }
+    _clients.clear();
+}
+
+void    ClientManager::clear_all_cgi_clients()
+{
+    _cgi_manager.clear();
+}

@@ -21,7 +21,7 @@
 #include <cerrno>
 #include <ctime>
 #include <string>
-
+#include "gloabl.hpp"
 struct Client;
 class Epoller;
 class ResponseBuilder;

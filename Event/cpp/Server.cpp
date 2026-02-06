@@ -38,17 +38,17 @@ static void applyConnectionHeader(HTTPResponse &resp, bool keepAlive)
     resp.headers["connection"] = keepAlive ? "keep-alive" : "close";
 }
 
-//static void terminateCgiOnce(CGI_Process *cgi)
+// static void terminateCgiOnce(CGI_Process *cgi)
 //{
-//    if (!cgi)
-//        return;
-//    if (cgi->_pid > 0)
-//    {
-//        kill(cgi->_pid, SIGKILL);
-//        waitpid(cgi->_pid, NULL, 0);
-//        cgi->_pid = -1; // 关键：防止后续任何路径重复 kill
-//    }
-//}
+//     if (!cgi)
+//         return;
+//     if (cgi->_pid > 0)
+//     {
+//         kill(cgi->_pid, SIGKILL);
+//         waitpid(cgi->_pid, NULL, 0);
+//         cgi->_pid = -1; // 关键：防止后续任何路径重复 kill
+//     }
+// }
 
 // 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
 Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
@@ -71,6 +71,40 @@ Server::~Server()
 
 void Server::cleanup()
 {
+    // clean clients
+    std::map<int, Client *> clients = _manager->get_all_socket_clients();
+    for (std::map<int, Client *>::iterator it = clients.begin(); it != clients.end(); ++it)
+    {
+        if (it->first >= 0)
+        {
+            if (it->second && it->second->_cgi)
+            {
+                it->second->_cgi->terminate();
+            }
+            _epoller->del_event(it->first);
+            close(it->first);
+        }
+    }
+    _manager->clear_all_clients();
+
+    // clean cgi clients
+    std::map<int, Client *> cgi_clients = _manager->get_all_cgi_clients();
+    for (std::map<int, Client *>::iterator it = cgi_clients.begin(); it != cgi_clients.end(); ++it)
+    {
+        if (it->first >= 0)
+        {
+            _epoller->del_event(it->first);
+            close(it->first);
+        }
+    }
+    _manager->clear_all_cgi_clients();
+
+    if (socketfd >= 0)
+    {
+        _epoller->del_event(socketfd);
+        close(socketfd);
+        socketfd = -1;
+    }
     if (_epoller)
     {
         delete _epoller;
@@ -457,6 +491,8 @@ bool Server::do_write(Client &c)
 
 void Server::check_cgi_timeout()
 {
+    if (!_manager)
+        return;
     unsigned long long now = Client::now_ms();
     std::vector<int> to_close;
     std::vector<Client *> timeout_client;
@@ -484,6 +520,8 @@ void Server::check_cgi_timeout()
 
 void Server::check_timeout()
 {
+    if (!_manager)
+        return;
     unsigned long long now = Client::now_ms();
     std::vector<int> timed_out;
 
@@ -499,18 +537,27 @@ void Server::check_timeout()
             !c->parser.getRequest().complet &&
             c->is_timeout(now, ALL_TIMEOUT_MS))
         {
-            HTTPResponse err = buildErrorResponse(408);
-            err.headers["connection"] = "close"; // 强制 close，语义与 B 一致
-            // content-length 一般 buildErrorResponse/ResponseBuilder 会补，但写死也无害
-            if (err.headers.find("content-length") == err.headers.end())
-                err.headers["content-length"] = toString(err.body.size());
-            c->is_keep_alive = false;
-            c->write_buffer = ResponseBuilder::build(err);
-            c->write_pos = 0;
-            c->_state = WRITING;
-            // 让它进入写流程
-            _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
+            timed_out.push_back(it->first);
         }
+    }
+    for (size_t i = 0; i < timed_out.size(); ++i)
+    {
+        int fd = timed_out[i];
+        Client *c = _manager->get_socket_client_by_fd(fd);
+        if (!c)
+            continue;
+
+        HTTPResponse err = buildErrorResponse(408);
+        err.headers["connection"] = "close"; // 强制 close，语义与 B 一致
+        // content-length 一般 buildErrorResponse/ResponseBuilder 会补，但写死也无害
+        if (err.headers.find("content-length") == err.headers.end())
+            err.headers["content-length"] = toString(err.body.size());
+        c->is_keep_alive = false;
+        c->write_buffer = ResponseBuilder::build(err);
+        c->write_pos = 0;
+        c->_state = WRITING;
+        // 让它进入写流程
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
     }
 }
 /**
@@ -599,7 +646,8 @@ void Server::run()
 {
     set_non_block_fd(socketfd);
     _epoller->add_event(socketfd, EPOLLIN | EPOLLET);
-    while (true)
+    g_server = this;
+    while (g_running)
     {
         int nfds = _epoller->wait(Timeout);
         check_cgi_timeout();

@@ -32,11 +32,27 @@
 #include <stdexcept>
 #include <cstdlib> // atoi
 #include "Event/hpp/Server.hpp"
+#include "gloabl.hpp"
+
+volatile sig_atomic_t g_running = 1;
+Server* g_server= NULL;
+
+static void signal_handler(int sig)
+{
+    std::cout << "\n[Signal] shutdown\n";
+    (void)sig;
+    g_running = 0;
+    if (g_server)
+        g_server->cleanup();
+}
 
 int main(int ac, char **av)
 {
     try
     {
+        signal(SIGINT, signal_handler);
+        //signal(SIGTERM, signal_handler);
+        //signal(SIGPIPE, SIG_IGN);
         int port = 8080;
         std::string cfg = "config_defaut/default.conf";
 
@@ -67,6 +83,7 @@ int main(int ac, char **av)
     catch (const std::exception &e)
     {
         std::cerr << "Failed: " << e.what() << std::endl;
+        g_server = NULL;
         return (1);
     }
 }

@@ -118,7 +118,8 @@ public:
     {
         return _cgi_manager;
     }
-
+    void    clear_all_clients();
+    void    clear_all_cgi_clients();
 private:
     std::map<int, Client *> _clients;     // socket_fd -> client*
     std::map<int, Client *> _cgi_manager; // pipe_fd -> client*
