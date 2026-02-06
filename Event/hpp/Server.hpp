@@ -43,7 +43,7 @@ public:
     void handle_socket_error(int fd);
 
     void handle_cgi_read(Client &c, int pipe_fd);
-    //void handle_cgi_read_error(Client &c, int pipe_fd);
+    // void handle_cgi_read_error(Client &c, int pipe_fd);
 
     bool do_read(Client &c);
     bool do_write(Client &c);
@@ -62,11 +62,13 @@ public:
     bool buildRespForCompletedReq(Client &c, int fd);
     bool load_config(const std::string &path);
     void finalize_cgi_response(Client &c, int pipe_fd);
+    static void signal_handler(int sig);
 
 private:
     // class de tous les configuration de server
     int port_nbr;
     int socketfd;
+    static volatile sig_atomic_t g_running;
     Epoller *_epoller;
     ClientManager *_manager;
     Session_manager *_session_cookie;

@@ -9,6 +9,7 @@
 #define CGI_TIMEOUT_MS 10000ULL
 
 #define TRACE() std::cout << "[] " << __FILE__ << ":" << __LINE__ << std::endl;
+volatile sig_atomic_t Server::g_running = 1;
 
 // ajouter le cas ->keep-alive
 static bool shouldCloseByStatus(int statusCode)
@@ -56,17 +57,21 @@ Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
     _epoller = new Epoller();
     _manager = new ClientManager();
     _session_cookie = new Session_manager();
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    signal(SIGCHLD, SIG_DFL);
+    g_running = 1;
 }
 Server::~Server()
 {
-    delete _epoller;
-    _epoller = NULL;
-    delete _manager;
-    _manager = NULL;
-    delete _session_cookie;
-    _session_cookie = NULL;
-    delete _routing;
-    _routing = NULL;
+    cleanup();
+}
+
+void Server::signal_handler(int sig)
+{
+    std::cout << "\n[Signal] shutdown\n";
+    if (sig == SIGINT)
+        g_running = 0;
 }
 
 void Server::cleanup()
@@ -400,12 +405,11 @@ void Server::handle_pipe_error(int fd)
 }
 void Server::finalize_cgi_response(Client &c, int pipe_fd)
 {
-    //if (c._cgi) // 读取剩下的内容
+    // if (c._cgi) // 读取剩下的内容
     //{
-    //    c._cgi->handle_output();
-    //    c._cgi->get_exit_status();
-    //}
-
+    //     c._cgi->handle_output();
+    //     c._cgi->get_exit_status();
+    // }
     bool keep_alive = c.parser.getRequest().keep_alive;
     HTTPResponse resp;
     if (c._cgi)
@@ -435,6 +439,7 @@ void Server::finalize_cgi_response(Client &c, int pipe_fd)
     c._state = WRITING;
     _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
 }
+
 void Server::handle_socket_error(int fd)
 {
     Client *c = _manager->get_socket_client_by_fd(fd);
@@ -646,7 +651,6 @@ void Server::run()
 {
     set_non_block_fd(socketfd);
     _epoller->add_event(socketfd, EPOLLIN | EPOLLET);
-    g_server = this;
     while (g_running)
     {
         int nfds = _epoller->wait(Timeout);
