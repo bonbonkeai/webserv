@@ -1,0 +1,6 @@
+This is a test file for CGI upload.
+Line 2 of the file.
+Line 3 of the file.
+The quick brown fox jumps over the lazy dog.
+1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz
+End of file.
