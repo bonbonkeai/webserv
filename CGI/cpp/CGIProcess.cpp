@@ -149,6 +149,9 @@ void CGI_Process::reset()
     start_time_ms = 0;
     last_output_ms = 0;
     _state = RUNNING;
+    _cgi_body_begin = 0;
+    _cgi_content_length = -1;
+    _cgi_header_parsed = false;
 }
 
 void CGI_Process::append_output(const char *buf, size_t n)
