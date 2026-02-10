@@ -76,6 +76,11 @@ public:
     unsigned long long start_time_ms;
     unsigned long long last_output_ms;
 
+    //parse header output 
+    bool    _cgi_header_parsed;
+    int _cgi_content_length;
+    int _cgi_body_begin;
+
     CGI_Process();
     ~CGI_Process();
     bool execute(const EffectiveConfig& config, HTTPRequest &req);

@@ -11,7 +11,8 @@
 
 CGI_Process::CGI_Process() : _error_message(),
                              _pid(-1), _read_fd(-1), _write_fd(-1), _state(RUNNING),
-                             _output_buffer(), start_time_ms(0), last_output_ms(0)
+                             _output_buffer(), start_time_ms(0), last_output_ms(0), _cgi_header_parsed(false),
+                             _cgi_content_length(-1), _cgi_body_begin(0)
 {
 }
 
@@ -391,6 +392,49 @@ bool CGI_Process::handle_output()
         {
             append_output(buf, n);
             last_output_ms = Client::now_ms();
+            if (!_cgi_header_parsed)
+            {
+                size_t pos = _output_buffer.find("\r\n\r\n");
+                if (pos != std::string::npos)
+                {
+                    _cgi_header_parsed = true;
+                    _cgi_body_begin += 4;
+
+                    std::string header = _output_buffer.substr(0, pos);
+                    std::istringstream  iss(header);
+                    std::string line;
+                    while (std::getline(iss, line))
+                    {
+                        if (!line.empty() && line[line.size() - 1] == '\r')
+                            line.erase(line.size() - 1, 1);
+                        size_t  colon = line.find(':');
+                        if (colon == std::string::npos)
+                            continue;
+                        std::string key = line.substr(0, colon);
+                        std::string value = line.substr(colon + 1);
+                        toLowerInPlace(key);
+                        ltrimSpaces(value);
+                        rtrimSpaces(value);
+                        if (key == "content-length")
+                            _cgi_content_length = std::atoi(value.c_str());
+                    }
+                }
+            }
+            if (_cgi_header_parsed)
+            {
+                if (_cgi_content_length == -1)
+                    return false;
+                size_t body_len = _output_buffer.size() - _cgi_content_length;
+                if (body_len >= (size_t)_cgi_content_length)
+                {
+                    get_exit_status();
+                    close(_read_fd);
+                    _read_fd = -1;
+                    _state = FINISHED;
+                    return true;
+                }
+            }
+            
             continue;
         }
         else if (n == 0)
