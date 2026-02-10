@@ -1,7 +1,7 @@
 #include "Config/hpp/EffectiveConfig.hpp"
 #include <stdexcept>
 
-static bool isNumberString(const std::string& s)
+static bool isNumberString(const std::string &s)
 {
     if (s.empty())
         return false;
@@ -11,24 +11,23 @@ static bool isNumberString(const std::string& s)
     return true;
 }
 
-
-static bool hasDirectiveEither(const std::map<std::string, std::vector<std::string> >& d,
-                               const std::string& a,
-                               const std::string& b)
+static bool hasDirectiveEither(const std::map<std::string, std::vector<std::string> > &d,
+                               const std::string &a,
+                               const std::string &b)
 {
     return ConfigUtils::hasDirective(d, a) || ConfigUtils::hasDirective(d, b);
 }
 
-static std::vector<std::string> getDirectiveEither(const std::map<std::string, std::vector<std::string> >& d,
-                                                   const std::string& a,
-                                                   const std::string& b)
+static std::vector<std::string> getDirectiveEither(const std::map<std::string, std::vector<std::string> > &d,
+                                                   const std::string &a,
+                                                   const std::string &b)
 {
     if (ConfigUtils::hasDirective(d, a))
         return ConfigUtils::getV(d, a);
     return ConfigUtils::getV(d, b);
 }
 
-void parseListen(const std::string& value, std::string& host, int& port)
+void parseListen(const std::string &value, std::string &host, int &port)
 {
     size_t pos = value.find(':');
 
@@ -47,12 +46,41 @@ void parseListen(const std::string& value, std::string& host, int& port)
         throw std::runtime_error("Invalid listen port");
 }
 
-LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const LocationConfig& raw)
+void completeCGI_executors(std::map<std::string, std::string> &cgi_exec)
+{
+    static std::map<std::string, std::string> DEFAULT_INTER;
+    if (DEFAULT_INTER.empty())
+    {
+        DEFAULT_INTER.insert(std::make_pair(".php", "php-cgi"));
+        DEFAULT_INTER.insert(std::make_pair(".py", "python3"));
+        DEFAULT_INTER.insert(std::make_pair(".sh", "bash"));
+        DEFAULT_INTER.insert(std::make_pair(".cgi", "/usr/bin/env"));
+    }
+
+    for (std::map<std::string, std::string>::iterator it = cgi_exec.begin(); it != cgi_exec.end(); ++it)
+    {
+        const std::string &ext = it->first;
+        std::string &inter = it->second;
+
+        if (inter.empty())
+        {
+            std::map<std::string, std::string>::const_iterator default_it = DEFAULT_INTER.find(ext);
+            if (default_it != DEFAULT_INTER.end())
+            {
+                inter = default_it->second;
+            }
+            else
+                throw std::runtime_error("cgi extension " + ext + " need an interpreter");
+        }
+    }
+}
+
+
+LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const LocationConfig &raw)
 {
     LocationRuntimeConfig loc;
 
     loc.path = raw.path;
-
     // héritage
     loc.root = srv.root;
     loc.has_root = false;
@@ -64,7 +92,8 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
     loc.has_client_max_body_size = false;
     loc.index = srv.index;
     loc.has_index = false;
-
+    loc.has_alias = false;
+    loc.alias.clear();
 
     // override
     if (ConfigUtils::hasDirective(raw.directives, "index"))
@@ -72,11 +101,23 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
         loc.index = ConfigUtils::getV(raw.directives, "index");
         loc.has_index = true;
     }
-    if (ConfigUtils::hasDirective(raw.directives, "root"))
+    // traitement alias or root
+    if (ConfigUtils::hasDirective(raw.directives, "alias"))
+    {
+        loc.alias = ConfigUtils::getSimpleV(raw.directives, "alias");
+        loc.has_alias = true;
+
+        // alias 和 root 互斥
+        loc.root.clear();
+        loc.has_root = false;
+    }
+    else if (ConfigUtils::hasDirective(raw.directives, "root"))
     {
         loc.root = ConfigUtils::getSimpleV(raw.directives, "root");
         loc.has_root = true;
     }
+    if (loc.has_alias && loc.has_root)
+        throw std::runtime_error("alias and root cannot be use together");
     if (ConfigUtils::hasDirective(raw.directives, "autoindex"))
     {
         loc.autoindex = ConfigUtils::toBool(ConfigUtils::getSimpleV(raw.directives, "autoindex"));
@@ -95,9 +136,10 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
         loc.allow_methodes.push_back("DELETE");
         loc.has_methodes = false;
     }
+
     if (ConfigUtils::hasDirective(raw.directives, "client_max_body_size"))
     {
-        loc.client_max_body_size = ConfigUtils::toSize(ConfigUtils::getSimpleV(raw.directives, "client_max_body_size"));
+        loc.client_max_body_size = ConfigUtils::toSize(ConfigUtils::getValue(raw.directives, "client_max_body_size"));
         loc.has_client_max_body_size = true;
     }
     loc.has_return = false;
@@ -135,10 +177,24 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
             std::string ext = values[i];
             std::string exec = values[i + 1];
             if (!ext.empty())
+            {
                 loc.cgi_exec[ext] = exec;
+                loc.cgi_extensions.insert(ext);
+            }
         }
         if (!loc.cgi_exec.empty())
+        {
             loc.has_cgi = true;
+            std::string effective_root = loc.alias.empty() ? loc.root : loc.alias;
+            completeCGI_executors(loc.cgi_exec);
+        }
+        loc.has_cgi = !loc.cgi_exec.empty();
+    }
+    // make sur .cgi for upload
+    if (loc.has_cgi && loc.cgi_exec.find(".cgi") == loc.cgi_exec.end())
+    {
+        loc.cgi_exec[".cgi"] = "/usr/bin/env";
+        loc.cgi_extensions.insert(".cgi");
     }
 
     // --- error_page ---
@@ -185,8 +241,7 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig& srv, const Locati
     return (loc);
 }
 
-
-ServerRuntimeConfig buildServer(const ServerConfig& raw)
+ServerRuntimeConfig buildServer(const ServerConfig &raw)
 {
     ServerRuntimeConfig srv;
 
@@ -238,7 +293,7 @@ ServerRuntimeConfig buildServer(const ServerConfig& raw)
     srv.client__max_body_size = 10 * 1024 * 1024;
     if (ConfigUtils::hasDirective(raw.directives, "client_max_body_size"))
         srv.client__max_body_size =
-            ConfigUtils::toSize(ConfigUtils::getSimpleV(raw.directives, "client_max_body_size"));
+            ConfigUtils::toSize(ConfigUtils::getValue(raw.directives, "client_max_body_size"));
 
     // error_page
     srv.error_page.clear();
@@ -282,7 +337,7 @@ ServerRuntimeConfig buildServer(const ServerConfig& raw)
     return srv;
 }
 
-std::vector<ServerRuntimeConfig> buildRuntime(const std::vector<ServerConfig>& raw)
+std::vector<ServerRuntimeConfig> buildRuntime(const std::vector<ServerConfig> &raw)
 {
     std::vector<ServerRuntimeConfig> out;
     for (size_t i = 0; i < raw.size(); ++i)

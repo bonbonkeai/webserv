@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <cstddef>
+#include <set>
 
 struct ErrorPageRule
 {
@@ -26,6 +27,7 @@ struct LocationRuntimeConfig
 {
     std::string path;
     std::string root;
+    std::string alias;
     bool autoindex;
     std::vector<std::string> allow_methodes;
     std::vector<std::string> index;
@@ -37,6 +39,7 @@ struct LocationRuntimeConfig
     bool has_methodes;
     bool has_index;
     bool has_client_max_body_size;
+    bool has_alias;
 
     bool has_return;
     int return_code;
@@ -44,6 +47,7 @@ struct LocationRuntimeConfig
 
     bool has_cgi;
     std::map<std::string, std::string> cgi_exec;
+    std::set<std::string> cgi_extensions;
 
     bool has_error_pages;
     std::map<int, ErrorPageRule> error_pages;

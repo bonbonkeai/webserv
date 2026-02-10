@@ -93,7 +93,7 @@ std::string ConfigUtils::getSimpleV(const std::map<std::string, std::vector<std:
     if (it == d.end())
         throw std::runtime_error("Directive not found " + cle);
     if (it->second.size() != 1)
-        throw std::runtime_error("Directive must have a seul valeur" + cle);
+        throw std::runtime_error("Directive must have a seul valeur " + cle);
     return it->second[0];
 }
 
@@ -107,6 +107,27 @@ std::vector<std::string> ConfigUtils::getV(const std::map<std::string, std::vect
     if (it == d.end())
         throw std::runtime_error("Directive not found " + cle);
     return it->second;
+}
+
+/**
+ * get value
+ */
+std::string ConfigUtils::getValue(const std::map<std::string, std::vector<std::string> > &d, const std::string &cle)
+{
+    std::map<std::string, std::vector<std::string> >::const_iterator it = d.find(cle);
+    if (it == d.end() || it->second.empty())
+        return "";
+    if (it->second.size() == 1)
+        return it->second[0];
+
+    std::string resultat;
+    for(size_t i = 0; i < it->second.size(); ++i)
+    {
+        if (i > 0)
+            resultat += "";
+        resultat += it->second[i];
+    }
+    return resultat;
 }
 
 /**

@@ -21,7 +21,7 @@
 #include <cerrno>
 #include <ctime>
 #include <string>
-#include "gloabl.hpp"
+#include <signal.h>
 struct Client;
 class Epoller;
 class ResponseBuilder;
@@ -36,7 +36,7 @@ public:
     ~Server();
     bool init_sockets();
     void run();
-    void set_non_block_fd(int fd);
+    static void set_non_block_fd(int fd);
     bool handle_connection();
 
     void handle_pipe_error(int fd);

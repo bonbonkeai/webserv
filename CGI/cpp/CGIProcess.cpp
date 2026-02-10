@@ -6,6 +6,8 @@
 #include <unistd.h> // 用于 access, getcwd
 #include <string.h> // 用于 strerror
 #define TRACE() std::cout << "[] " << __FILE__ << ":" << __LINE__ << std::endl;
+#define EXECUTION_TIMEOUT 10000ULL
+#define START_TIMEOUT 5000ULL
 
 CGI_Process::CGI_Process() : _error_message(),
                              _pid(-1), _read_fd(-1), _write_fd(-1), _state(RUNNING),
@@ -31,28 +33,94 @@ std::string CGI_Process::format_header_key(const std::string &key)
     return resultat;
 }
 
-CGI_ENV CGI_Process::get_env_from_request(HTTPRequest &req)
+bool CGI_ENV::check_extension(const std::string &str, const std::set<std::string> &cgi_exetension)
+{
+    std::set<std::string>::const_iterator it = cgi_exetension.find(str);
+    return it == cgi_exetension.end();
+}
+
+CGI_path CGI_ENV::final_script_paths(const HTTPRequest &req, const EffectiveConfig &config)
+{
+    const std::string &path = req.path;
+    CGI_path out;
+    // check path is in location
+    if (path.compare(0, config.location_path.size(), config.location_path) != 0)
+        throw std::runtime_error("cgi path not under location");
+
+    std::string path_after_location = path.substr(config.location_path.size());
+    if (path_after_location.empty() || path_after_location[0] != '/')
+    {
+        path_after_location = "/" + path_after_location;
+    }
+
+    std::string current_path;
+    size_t pos = 1;
+
+    while (true)
+    {
+        size_t flash = path_after_location.find('/', pos + 1);
+        std::string str;
+        if (flash == std::string::npos)
+            str = path_after_location.substr(pos);
+        else
+            str = path_after_location.substr(pos, flash - pos);
+        current_path += str;
+        if (check_extension(str, config.cgi_extensions))
+        {
+            out.script_name = config.location_path + current_path;
+            out.path_info = (flash == std::string::npos) ? "" : path_after_location.substr(flash);
+
+            if (!config.alias.empty())
+                out.script_filename = config.alias + current_path;
+            else
+                out.script_filename = config.root + out.script_name;
+            return out;
+        }
+        if (flash == std::string::npos)
+            break;
+        pos = flash;
+    }
+    throw std::runtime_error("no cgi script find in path");
+}
+
+CGI_ENV CGI_Process::get_env_from_request(HTTPRequest &req, const EffectiveConfig &config)
 {
     CGI_ENV env;
 
     env.env_str.push_back("GATEWAY_INTERFACE=CGI/1.1");
+    env.env_str.push_back("SERVER_SOFTWARE=webserv/1.0");
+    env.env_str.push_back("REDIRECT_STATUS=200");
+
     env.env_str.push_back("REQUEST_METHOD=" + req.method);
     env.env_str.push_back("SERVER_PROTOCOL=HTTP/1.1");
-
     env.env_str.push_back("QUERY_STRING=" + req.query);
 
-    env.env_str.push_back("SCRIPT_NAME=" + req.path);
-    env.env_str.push_back("SERVER_NAME=localhost");
-    env.env_str.push_back("SERVER_PORT=8080");
-    env.env_str.push_back("SERVER_SOFTWARE=webserv/1.0");
+    env.env_str.push_back("SCRIPT_NAME=" + req.cgi_script_name);
     env.env_str.push_back("REMOTE_ADDR=127.0.0.1");
 
-    if (req.method == "POST")
+    // server name port
+    env.env_str.push_back("SERVER_NAME=" + config.server_name);
+    env.env_str.push_back("SERVER_PORT=" + toString(config.server_port));
+
+    // request uri
+    env.env_str.push_back("REQUEST_URI=" + req.uri);
+    env.env_str.push_back("DOCUMENT_URI=" + req.path);
+
+    env.env_str.push_back("DOCUMENT_ROOT=" + config.root);
+
+    if (req.method == "POST" && req.has_body)
     {
         env.env_str.push_back("CONTENT_LENGTH=" + toString(req.contentLength));
         std::map<std::string, std::string>::const_iterator it = req.headers.find("content-type");
         if (it != req.headers.end())
             env.env_str.push_back("CONTENT_TYPE=" + req.headers["content-type"]);
+        else
+            env.env_str.push_back("CONTENT_TYPE=");
+    }
+    else
+    {
+        env.env_str.push_back("CONTENT_TYPE=");
+        env.env_str.push_back("CONTENT_LENGTH=");
     }
 
     for (std::map<std::string, std::string>::const_iterator it = req.headers.begin(); it != req.headers.end(); it++)
@@ -61,7 +129,8 @@ CGI_ENV CGI_Process::get_env_from_request(HTTPRequest &req)
             continue;
         env.env_str.push_back(format_header_key(it->first) + "=" + it->second);
     }
-    env.final_env();
+
+    env.env_str.push_back("PATH=/usr/bin:/bin");
     return env;
 }
 
@@ -107,10 +176,25 @@ void CGI_Process::close_pipes(int pipe_in[2], int pipe_out[2])
     close(pipe_out[1]);
 }
 
-bool CGI_Process::execute(const std::string &script_path, HTTPRequest &req)
+bool CGI_Process::execute(const EffectiveConfig &config, HTTPRequest &req)
 {
     int pipe_in[2];
     int pipe_out[2];
+
+    try
+    {
+        CGI_path paths = CGI_ENV::final_script_paths(req, config);
+        script_path = paths.script_filename;
+
+        req.cgi_path_info = paths.path_info;
+        req.cgi_script_name = paths.script_name;
+    }
+    catch (const std::runtime_error &e)
+    {
+        _state = ERROR_CGI;
+        _error_message = std::string("CGI path resolution failed: ") + e.what();
+        return false;
+    }
 
     if (access(script_path.c_str(), X_OK) != 0)
     {
@@ -127,11 +211,11 @@ bool CGI_Process::execute(const std::string &script_path, HTTPRequest &req)
         return false;
     }
     if (_pid == 0)
-        setup_child_process(pipe_in, pipe_out, script_path, req);
+        setup_child_process(pipe_in, pipe_out, config, req);
     return setup_parent_process(pipe_in, pipe_out, req);
 }
 
-bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2], const std::string &script_path,
+bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2], const EffectiveConfig &config,
                                       HTTPRequest &req)
 {
     close(pipe_in[1]);
@@ -150,9 +234,23 @@ bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2], const std
         _exit(1);
     }
 
-    CGI_ENV env = get_env_from_request(req);
-    env.env_str.push_back("PATH=/usr/bin:/bin");
+    CGI_ENV env = get_env_from_request(req, config);
     env.env_str.push_back("SCRIPT_FILENAME=" + std::string(abs_path));
+    env.env_str.push_back("PATH_INFO=" + req.cgi_path_info);
+    env.env_str.push_back("SCRIPT_NAME=" + req.cgi_script_name);
+
+    std::string translated;
+    if (!req.cgi_path_info.empty())
+    {
+        std::string script_dir = abs_path;
+        size_t  last_slash = script_dir.find_last_of('/');
+        if (last_slash != std::string::npos)
+        {
+            script_dir = script_dir.substr(0, last_slash + 1);
+        }
+        translated = script_dir + req.cgi_path_info.substr(1);
+    }
+    env.env_str.push_back("PATH_TRANSLATED=" + translated);
     env.final_env();
 
     char *argv[] = {abs_path, NULL};
@@ -254,14 +352,28 @@ void CGI_Process::terminate()
     }
 }
 
-bool CGI_Process::check_timeout(unsigned long long now, unsigned long long timeout)
+bool CGI_Process::check_timeout(unsigned long long now)
 {
-    if (!_output_buffer.empty())
+    unsigned long long diff = now - start_time_ms;
+    if (_output_buffer.empty())
     {
-        return (now - last_output_ms) > timeout;
+        if (diff > START_TIMEOUT)
+            return true;
+        return false;
     }
-    else
-        return (now - start_time_ms) > timeout;
+
+    // partiel pipe
+    if (last_output_ms > 0)
+    {
+        unsigned long long diff_time = now - last_output_ms;
+        if (diff_time > EXECUTION_TIMEOUT)
+            return true;
+    }
+
+    // total execution timeout
+    if (diff > EXECUTION_TIMEOUT * 2)
+        return true;
+    return false;
 }
 
 bool CGI_Process::handle_output()

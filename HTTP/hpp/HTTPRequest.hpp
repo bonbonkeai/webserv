@@ -48,8 +48,10 @@ public:
         bool    has_transfer_encoding;
         bool    chunked;
         std::size_t max_body_size; //先写死，后面接入config
+        //cgi 
         bool    is_cgi_request() const;
-
+        std::string     cgi_path_info;
+        std::string     cgi_script_name;
         std::string authority;
 
         //Config

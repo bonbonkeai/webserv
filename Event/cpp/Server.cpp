@@ -6,7 +6,6 @@
 
 #define Timeout 50 // 50-100
 #define ALL_TIMEOUT_MS 5000ULL
-#define CGI_TIMEOUT_MS 10000ULL
 
 #define TRACE() std::cout << "[] " << __FILE__ << ":" << __LINE__ << std::endl;
 volatile sig_atomic_t Server::g_running = 1;
@@ -324,9 +323,11 @@ void Server::handle_cgi_read(Client &c, int pipe_fd)
         return;
     }
     bool finished = c._cgi->handle_output();
-    c._cgi->get_exit_status();
-    if (finished || c._cgi->_state != RUNNING)
+    if (finished)
+    {
+        c._cgi->get_exit_status();
         finalize_cgi_response(c, pipe_fd);
+    }
     // char buf[4096];
     // while (true)
     //{
@@ -384,7 +385,7 @@ void Server::handle_pipe_error(int fd)
     if (!c || !c->_cgi)
         return;
     c->_cgi->handle_pipe_error();
-    c->_cgi->_state = ERROR_CGI;
+    c->_cgi->_state = CGI_Process::ERROR_CGI;
     finalize_cgi_response(*c, fd);
     // if (!c)
     //     return;
@@ -405,11 +406,11 @@ void Server::handle_pipe_error(int fd)
 }
 void Server::finalize_cgi_response(Client &c, int pipe_fd)
 {
-    // if (c._cgi) // 读取剩下的内容
-    //{
-    //     c._cgi->handle_output();
-    //     c._cgi->get_exit_status();
-    // }
+    if (c._cgi)
+    {
+        c._cgi->handle_output();
+        c._cgi->get_exit_status();
+    }
     bool keep_alive = c.parser.getRequest().keep_alive;
     HTTPResponse resp;
     if (c._cgi)
@@ -509,7 +510,7 @@ void Server::check_cgi_timeout()
         Client *c = it->second;
         if (!c || !c->_cgi || !c->is_cgi)
             continue;
-        if (c->_cgi->check_timeout(now, CGI_TIMEOUT_MS))
+        if (c->_cgi->check_timeout(now))
         {
             c->_cgi->handle_timeout();
             to_close.push_back(pipe_fd);
@@ -615,8 +616,8 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     if (req.is_cgi_request())
     {
         c._cgi = new CGI_Process();
-        std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
-        if (!c._cgi->execute(scriptPath, req))
+        // std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
+        if (!c._cgi->execute(req.effective, req))
         {
             HTTPResponse err = buildErrorResponse(500);
             bool ka = computeKeepAlive(req, 500);
@@ -815,11 +816,32 @@ bool Server::load_config(const std::string &path)
         throw std::runtime_error("config: no server block found");
     // 默认 cfg：用于“还没解析 Host 时”的兜底
     // 这里用第一个 server 的 defaults
-    _default_cfg.root = _rt_servers[0].root;
-    _default_cfg.index = _rt_servers[0].index;
-    _default_cfg.autoindex = _rt_servers[0].autoindex;
-    _default_cfg.allowed_methods = _rt_servers[0].allowed_methods;
-    _default_cfg.error_pages = _rt_servers[0].error_page;
-    _default_cfg.max_body_size = _rt_servers[0].client__max_body_size;
+    //_default_cfg.root = _rt_servers[0].root;
+    //_default_cfg.index = _rt_servers[0].index;
+    //_default_cfg.autoindex = _rt_servers[0].autoindex;
+    //_default_cfg.allowed_methods = _rt_servers[0].allowed_methods;
+    //_default_cfg.error_pages = _rt_servers[0].error_page;
+    //_default_cfg.max_body_size = _rt_servers[0].client__max_body_size;
+    if (!_rt_servers.empty())
+    {
+        const ServerRuntimeConfig &first_server = _rt_servers[0];
+        _default_cfg.server_port = first_server.port;
+        _default_cfg.server_name = first_server.server_name;
+        _default_cfg.root = first_server.root;
+        _default_cfg.index = first_server.index;
+        _default_cfg.autoindex = first_server.autoindex;
+        _default_cfg.allowed_methods = first_server.allowed_methods;
+        _default_cfg.error_pages = first_server.error_page;
+        _default_cfg.max_body_size = first_server.client__max_body_size;
+
+        // 设置默认值
+        _default_cfg.alias = "";
+        _default_cfg.location_path = "";
+        _default_cfg.has_return = false;
+        _default_cfg.return_code = 302;
+        _default_cfg.return_url = "";
+        _default_cfg.is_cgi = false;
+        _default_cfg.upload_path = "";
+    }
     return (true);
 }
