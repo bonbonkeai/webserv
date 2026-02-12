@@ -182,14 +182,14 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const Locati
                 loc.cgi_extensions.insert(ext);
             }
         }
-        if (!loc.cgi_exec.empty())
-        {
-            loc.has_cgi = true;
-            std::string effective_root = loc.alias.empty() ? loc.root : loc.alias;
-            completeCGI_executors(loc.cgi_exec);
-        }
-        loc.has_cgi = !loc.cgi_exec.empty();
     }
+    if (!loc.cgi_exec.empty())
+    {
+        loc.has_cgi = true;
+        std::string effective_root = loc.alias.empty() ? loc.root : loc.alias;
+        completeCGI_executors(loc.cgi_exec);
+    }
+    
     // make sur .cgi for upload
     if (loc.has_cgi && loc.cgi_exec.find(".cgi") == loc.cgi_exec.end())
     {
