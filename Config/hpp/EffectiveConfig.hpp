@@ -41,7 +41,7 @@ struct EffectiveConfig
     std::string location_path;
 
     EffectiveConfig() : autoindex(false), max_body_size(0),
-                        has_return(false), return_code(302), is_cgi(false), has_upload_path(false) {}
+                        has_return(false), return_code(302), is_cgi(false), upload_path(""), has_upload_path(false) {}
 };
 
 ServerRuntimeConfig buildServer(const ServerConfig &raw);

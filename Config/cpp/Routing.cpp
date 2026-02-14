@@ -177,15 +177,6 @@ std::string Routing::get_extension(const std::string &fs_path)
     return fs_path.substr(point);
 }
 
-bool Routing::extension_match(const std::string &fs_path, std::set<std::string> &cgi_extension)
-{
-    std::string ext = get_extension(fs_path);
-
-    if (ext.empty())
-        return false;
-    return cgi_extension.find(ext) != cgi_extension.end();
-}
-
 EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult &rout) const
 {
     const ServerRuntimeConfig &server = selectS(req, listen_port);
@@ -220,8 +211,12 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
     cfg.cgi_extensions = (loc && !loc->cgi_extensions.empty()) ? loc->cgi_extensions : std::set<std::string>();
 
     // upload_path
-    cfg.upload_path = (loc && loc->has_upload_path) ? loc->upload_path : server.upload_path;
-    cfg.has_upload_path = (loc && loc->has_upload_path) || !server.upload_path.empty();
+    cfg.upload_path.clear();
+    if (loc && loc->has_upload_path)
+        cfg.upload_path = loc->upload_path;
+    else if (!server.upload_path.empty())
+        cfg.upload_path = server.upload_path;
+    cfg.has_upload_path = !cfg.upload_path.empty();
 
     cfg.has_return = (loc && loc->has_return);
     if (cfg.has_return)
@@ -235,24 +230,107 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
     }
 
     // fs_path
-    if (!cfg.alias.empty())
+    if (loc && loc->has_alias)
     {
-        std::string suffix = req.path.substr(loc ? loc->path.size() : 0);
-        rout.fs_path = cfg.alias + suffix;
+        std::string suffix = req.path.substr(loc->path.size());
+
+        std::string base = loc->alias;
+        if (!base.empty() && base[base.size() - 1] != '/')
+            base += '/';
+
+        if (!suffix.empty() && suffix[0] == '/')
+            suffix.erase(0, 1);
+
+        rout.fs_path = base + suffix;
     }
     else
-        rout.fs_path = cfg.root + req.path;
-
-    if (cfg.is_cgi && extension_match(rout.fs_path, cfg.cgi_extensions))
-        rout.action = ACTION_CGI;
-
-    // upload action
-    else if (req.method == "POST")
     {
-        if(!cfg.upload_path.empty())
-            rout.action = ACTION_UPLOAD;
+        std::string base = (loc && loc->has_root) ? loc->root : server.root;
+
+        if (!base.empty() && base[base.size() - 1] == '/')
+            base.erase(base.size() - 1);
+
+        rout.fs_path = base + req.path;
+    }
+    // prepare script name, path info for cgi
+    if (cfg.is_cgi)
+    {
+        std::string uri_after_loc;
+
+        if (loc)
+            uri_after_loc = req.path.substr(loc->path.size());
         else
-            rout.action = ACTION_CGI;//post 有 cgi
+            uri_after_loc = req.path;
+
+        if (uri_after_loc.empty())
+            uri_after_loc = "/";
+        else if (uri_after_loc[0] != '/')
+            uri_after_loc = "/" + uri_after_loc;
+
+        size_t pos = 1;
+        std::string current;
+
+        while (true)
+        {
+            size_t slash = uri_after_loc.find('/', pos);
+
+            std::string part;
+            if (slash == std::string::npos)
+                part = uri_after_loc.substr(pos);
+            else
+                part = uri_after_loc.substr(pos, slash - pos);
+
+            current += "/" + part;
+
+            std::string ext = get_extension(part);
+
+            if (!ext.empty() && cfg.cgi_extensions.count(ext))
+            {
+                rout.script_name = loc ? loc->path + current : current;
+
+                if (slash == std::string::npos)
+                    rout.path_info = "";
+                else
+                    rout.path_info = uri_after_loc.substr(slash);
+
+                // 重新计算 CGI 专用 fs_path
+                if (loc && loc->has_alias)
+                {
+                    std::string base = loc->alias;
+                    if (!base.empty() && base[base.size() - 1] != '/')
+                        base += '/';
+
+                    std::string script_suffix = current;
+                    if (!script_suffix.empty() && script_suffix[0] == '/')
+                        script_suffix.erase(0, 1);
+
+                    rout.fs_path = base + script_suffix;
+                }
+                else
+                {
+                    std::string base = (loc && loc->has_root) ? loc->root : server.root;
+                    if (!base.empty() && base[base.size() - 1] == '/')
+                        base.erase(base.size() - 1);
+
+                    rout.fs_path = base + rout.script_name;
+                }
+
+                rout.action = ACTION_CGI;
+                return cfg;
+            }
+
+            if (slash == std::string::npos)
+                break;
+
+            pos = slash + 1;
+        }
+    }
+
+    if (cfg.autoindex)
+        rout.action = ACTION_AUTOINDEX;
+    else if (req.method == "POST" && !cfg.upload_path.empty())
+    {
+        rout.action = ACTION_UPLOAD;
     }
     else
         rout.action = ACTION_STATIC;

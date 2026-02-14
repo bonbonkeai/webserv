@@ -26,7 +26,6 @@ public:
     // const LocationConfig* matchLocation(const ServerConfig& server, const std::string& uri);
     const LocationRuntimeConfig *matchLocation(const ServerRuntimeConfig &server, const std::string &uri) const;
     static std::string  get_extension(const std::string& fs_path);
-    static bool extension_match(const std::string& fs_path, std::set<std::string> &cgi_extension);
 };
 #endif
 

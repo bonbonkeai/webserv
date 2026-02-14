@@ -75,7 +75,6 @@ void completeCGI_executors(std::map<std::string, std::string> &cgi_exec)
     }
 }
 
-
 LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const LocationConfig &raw)
 {
     LocationRuntimeConfig loc;
@@ -182,14 +181,14 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const Locati
                 loc.cgi_extensions.insert(ext);
             }
         }
-        if (!loc.cgi_exec.empty())
-        {
-            loc.has_cgi = true;
-            std::string effective_root = loc.alias.empty() ? loc.root : loc.alias;
-            completeCGI_executors(loc.cgi_exec);
-        }
-        loc.has_cgi = !loc.cgi_exec.empty();
     }
+    if (!loc.cgi_exec.empty())
+    {
+        loc.has_cgi = true;
+        std::string effective_root = loc.alias.empty() ? loc.root : loc.alias;
+        completeCGI_executors(loc.cgi_exec);
+    }
+
     // make sur .cgi for upload
     if (loc.has_cgi && loc.cgi_exec.find(".cgi") == loc.cgi_exec.end())
     {
@@ -239,15 +238,20 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const Locati
         }
     }
 
-    //upload_path
+    // upload_path
     if (ConfigUtils::hasDirective(raw.directives, "upload_path"))
     {
         loc.upload_path = ConfigUtils::getSimpleV(raw.directives, "upload_path");
         loc.has_upload_path = true;
     }
-    else
+    else if (!srv.upload_path.empty())
     {
         loc.upload_path = srv.upload_path;
+        loc.has_upload_path = true;
+    }
+    else
+    {
+        loc.upload_path.clear();
         loc.has_upload_path = false;
     }
     return (loc);
@@ -270,9 +274,16 @@ ServerRuntimeConfig buildServer(const ServerConfig &raw)
         /*std::vector<std::string> names = ConfigUtils::getV(raw.directives, "server_name");
         if (!names.empty())
             srv.server_name = names[0];*/
-        //上面那个只会支持一个server 下面这个 变成支持很多serveurs
-        srv.server_names = ConfigUtils::getV(raw.directives, "server_name");
+        // 上面那个只会支持一个server 下面这个 变成支持很多serveurs
+        std::vector<std::string> names = ConfigUtils::getV(raw.directives, "server_name");
+        if (names.empty())
+            throw std::runtime_error("servername is empty");
+        if (names.size() > 1)
+            throw std::runtime_error("multipe servername find");
+        srv.server_name = names[0];
     }
+    else
+        srv.server_name = "";
 
     // root
     srv.root = "/var/www";
@@ -349,8 +360,8 @@ ServerRuntimeConfig buildServer(const ServerConfig &raw)
         }
     }
 
-    //upload path
-    srv.upload_path = "";
+    // upload path
+    srv.upload_path = "www/upload";
     if (ConfigUtils::hasDirective(raw.directives, "upload_path"))
         srv.upload_path = ConfigUtils::getSimpleV(raw.directives, "upload_path");
     return srv;
