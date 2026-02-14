@@ -27,10 +27,12 @@ SRCS =	HTTP/cpp/HTTPRequest.cpp \
 		Method_Handle/cpp/RedirectHandle.cpp \
 		Method_Handle/cpp/StaticHandle.cpp \
 		Method_Handle/cpp/UploadHandle.cpp \
+		Method_Handle/cpp/CGIRequestHandle.cpp \
  		Event/cpp/Client.cpp \
  		Event/cpp/EpollManager.cpp \
  		Event/cpp/Server.cpp \
  		CGI/cpp/CGIProcess.cpp \
+		CGI/cpp/CGIManager.cpp \
 		webserv.cpp
 # 		main.cpp
 

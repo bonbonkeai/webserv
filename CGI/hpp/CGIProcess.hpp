@@ -3,7 +3,9 @@
 
 #include "../../HTTP/hpp/HTTPRequest.hpp"
 #include "../../HTTP/hpp/HTTPResponse.hpp"
-#include "Event/hpp/Server.hpp"
+#include "Config/hpp/EffectiveConfig.hpp"
+#include "HTTP/hpp/ErrorResponse.hpp"
+#include "Method_Handle/hpp/CGIRequestHandle.hpp"
 
 #include <iostream>
 #include <vector>
@@ -17,50 +19,73 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <string>
+#define EXECUTION_TIMEOUT 10000ULL
+#define START_TIMEOUT 5000ULL
 
-class   Server;
-
+class Server;
 struct Client;
-struct CGI_ENV
-{
-    std::vector<std::string> env_str;
-    std::vector<char *> envp;
-
-    void final_env()
-    {
-        for (size_t i = 0; i < env_str.size(); i++)
-            envp.push_back((char *)env_str[i].c_str());
-        envp.push_back(NULL);
-    }
-    ~CGI_ENV() {}
-};
+struct CGI_ENV;
 
 class CGI_Process
 {
 private:
 
+    bool create_pipe(int pipe_in[2], int pipe_out[2]);
+    void close_pipes(int pipe_in[2], int pipe_out[2]);
+    bool setup_child_process(int pipe_in[2], int pipe_out[2], const EffectiveConfig &config,
+                             const HTTPRequest &req);
+    bool setup_parent_process(int pipe_in[2], int pipe_out[2],const HTTPRequest &req);
+
 public:
+    enum State
+    {
+        CREATE,
+        RUNNING,
+        FINISHED,
+        ERROR,
+        TIMEOUT
+    } _state;
+
     pid_t _pid;
     int _read_fd;
     int _write_fd;
+    // output
     std::string _output_buffer;
+    bool has_output;
+    size_t write_pos;
 
-    // time_t start_time;
-
+    // timeout
     unsigned long long start_time_ms;
-    unsigned long long  last_output_ms;
+    unsigned long long last_output_ms;
+
+    Client *client;
 
     CGI_Process();
     ~CGI_Process();
+    bool execute(const EffectiveConfig &config, const HTTPRequest &req, Client* c);
+    void terminate();
 
-    std::string format_header_key(const std::string &key);
-    CGI_ENV get_env_from_request(HTTPRequest &req); // 可能还需要别的内容
-    bool execute(const std::string &script_path, HTTPRequest &req);
-    void reset();
-    void append_output(const char *buf, size_t n);
-    void    set_non_block_fd(int fd);
-    //del_cgi_fd()调用
-    void reset_no_kill();
+    // IO gestion
+    bool write_body(const std::string &body);
+    bool read_output(std::string &buffer);
+
+    // timeout
+   // bool check_timeout(unsigned long long now);
+
+    bool  is_running()
+    {
+        return _state == CGI_Process::RUNNING;
+    }
+    bool    is_finished()
+    {
+        return _state == CGI_Process::FINISHED;
+    }
+    bool    is_timeout()
+    {
+        return _state == CGI_Process::TIMEOUT;
+    }
+    void set_non_block_fd(int fd);
+
 };
 
 #endif

@@ -2,11 +2,11 @@
 #define ERRORPAGE_HPP
 
 #include <string>
-#include "HTTPResponse.hpp"
-#include "ConfigParser.hpp"
-#include "ConfigTokenizer.hpp"
-#include "LocationConfig.hpp"
-#include "ServerConfig.hpp"
+#include "HTTP/hpp/HTTPResponse.hpp"
+#include "Config/hpp/ConfigParser.hpp"
+#include "Config/hpp/ConfigTokenizer.hpp"
+#include "Config/hpp/LocationConfig.hpp"
+#include "Config/hpp/ServerConfig.hpp"
 
 class ErrorPage
 {

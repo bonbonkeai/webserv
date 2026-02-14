@@ -4,6 +4,15 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <cstddef>
+
+struct ErrorPageRule
+{
+    std::string uri;
+    bool override_set;
+    int override_code;
+    ErrorPageRule(): uri(""), override_set(false), override_code(0) {}
+};
 
 /* Location Brut(parser)*/
 struct LocationConfig
@@ -20,12 +29,24 @@ struct LocationRuntimeConfig
     bool autoindex;
     std::vector<std::string> allow_methodes;
     std::vector<std::string> index;
+    size_t client_max_body_size;
 
     //FLags d override
     bool has_root;
     bool has_autoindex;
     bool has_methodes;
     bool has_index;
+    bool has_client_max_body_size;
+
+    bool has_return;
+    int return_code;
+    std::string return_url;
+
+    bool has_cgi;
+    std::map<std::string, std::string> cgi_exec;
+
+    bool has_error_pages;
+    std::map<int, ErrorPageRule> error_pages;
 };
 #endif
 

@@ -3,9 +3,10 @@
 
 #include <string>
 #include <vector>
-#include "ConfigTokenizer.hpp"
-#include "LocationConfig.hpp"
-#include "ServerConfig.hpp"
+#include "Config/hpp/ConfigTokenizer.hpp"
+#include "Config/hpp/LocationConfig.hpp"
+#include "Config/hpp/ServerConfig.hpp"
+#include "Config/hpp/ConfigUtils.hpp"
 
 class ConfigParser
 {

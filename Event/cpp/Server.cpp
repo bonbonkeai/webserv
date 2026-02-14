@@ -4,12 +4,14 @@
 #include <sys/time.h>
 #include <vector>
 
-
 #define Timeout 50 // 50-100
 #define ALL_TIMEOUT_MS 5000ULL
-#define CGI_TIMEOUT_MS 10000ULL
+#define EXECUTION_TIMEOUT 10000ULL
+#define START_TIMEOUT 5000ULL
+
 
 #define TRACE() std::cout << "[] " << __FILE__ << ":" << __LINE__ << std::endl;
+volatile sig_atomic_t Server::g_running = 1;
 
 // ajouter le cas ->keep-alive
 static bool shouldCloseByStatus(int statusCode)
@@ -39,17 +41,17 @@ static void applyConnectionHeader(HTTPResponse &resp, bool keepAlive)
     resp.headers["connection"] = keepAlive ? "keep-alive" : "close";
 }
 
-static void terminateCgiOnce(CGI_Process *cgi)
-{
-    if (!cgi)
-        return;
-    if (cgi->_pid > 0)
-    {
-        kill(cgi->_pid, SIGKILL);
-        waitpid(cgi->_pid, NULL, 0);
-        cgi->_pid = -1; // 关键：防止后续任何路径重复 kill
-    }
-}
+// static void terminateCgiOnce(CGI_Process *cgi)
+//{
+//     if (!cgi)
+//         return;
+//     if (cgi->_pid > 0)
+//     {
+//         kill(cgi->_pid, SIGKILL);
+//         waitpid(cgi->_pid, NULL, 0);
+//         cgi->_pid = -1; // 关键：防止后续任何路径重复 kill
+//     }
+// }
 
 // 这里端口-1，然后 htons(port_nbr)。这可能会导致 bind 失败（或者绑定到不可预期端口），服务器根本起不来。或许可以先给一个固定值（比如 8080）？
 Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
@@ -57,21 +59,59 @@ Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
     _epoller = new Epoller();
     _manager = new ClientManager();
     _session_cookie = new Session_manager();
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    signal(SIGCHLD, SIG_DFL);
+    g_running = 1;
 }
 Server::~Server()
 {
-    delete _epoller;
-    _epoller = NULL;
-    delete _manager;
-    _manager = NULL;
-    delete _session_cookie;
-    _session_cookie = NULL;
-    delete _routing;
-    _routing = NULL;
+    cleanup();
+}
+
+void Server::signal_handler(int sig)
+{
+    std::cout << "\n[Signal] shutdown\n";
+    if (sig == SIGINT)
+        g_running = 0;
 }
 
 void Server::cleanup()
 {
+    // clean clients
+    std::map<int, Client *> clients = _manager->get_all_socket_clients();
+    for (std::map<int, Client *>::iterator it = clients.begin(); it != clients.end(); ++it)
+    {
+        if (it->first >= 0)
+        {
+            if (it->second && it->second->cgi_handler)
+            {
+                CGI_Process* proc = it->second->cgi_handler->get_process();
+                if (proc)
+                    proc->terminate();
+            }
+            _epoller->del_event(it->first);
+            close(it->first);
+        }
+    }
+    _manager->clear_all_clients();
+
+    // clean cgi clients
+    for(std::map<CGIRequestHandle*, Client*>::iterator it = _handler_to_client.begin(); 
+            it != _handler_to_client.end(); ++it)
+    {
+        delete it->first;
+    }
+    _cgi_read_map.clear();
+    _cgi_write_map.clear();
+    _handler_to_client.clear();
+
+    if (socketfd >= 0)
+    {
+        _epoller->del_event(socketfd);
+        close(socketfd);
+        socketfd = -1;
+    }
     if (_epoller)
     {
         delete _epoller;
@@ -130,11 +170,7 @@ bool Server::handle_connection()
         socklen_t client_len = sizeof(clientaddr);
         int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
         if (connect_fd < 0)
-        {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                return true;
-            return false;
-        }
+            return true;
         Server::set_non_block_fd(connect_fd);
         _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
         _manager->add_socket_client(connect_fd); // client state is read_line
@@ -146,6 +182,30 @@ bool Server::handle_connection()
     }
     return true;
 }
+// bool Server::handle_connection()
+//{
+//     while (true)
+//     {
+//         struct sockaddr_in clientaddr;
+//         socklen_t client_len = sizeof(clientaddr);
+//         int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
+//         if (connect_fd < 0)
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 return true;
+//             return false;
+//         }
+//         Server::set_non_block_fd(connect_fd);
+//         _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
+//         _manager->add_socket_client(connect_fd); // client state is read_line
+//         // 这里面更新时间没有必要，因为add socket client的时候，client construit的时候就已经有一个时间设置了
+//         // Client *c = _manager->get_socket_client_by_fd(connect_fd);
+//         // if (c)
+//         //     c->last_activity_ms = Client::now_ms();
+//         //
+//     }
+//     return true;
+// }
 
 HTTPResponse Server::process_request(const HTTPRequest &req)
 {
@@ -154,7 +214,6 @@ HTTPResponse Server::process_request(const HTTPRequest &req)
     delete h;
     return (resp);
 }
-
 bool Server::do_read(Client &c)
 {
     char tmp[4096];
@@ -178,19 +237,14 @@ bool Server::do_read(Client &c)
                 c.write_pos = 0;
                 return (true);
             }
+            continue;
         }
         else if (n == 0)
         {
             c._state = CLOSED;
             return (false);
         }
-        else
-        {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                break;
-            c._state = ERROR;
-            return (false);
-        }
+        break;
     }
     if (c.parser.getRequest().complet)
     {
@@ -200,98 +254,195 @@ bool Server::do_read(Client &c)
     return (false);
 }
 
-void Server::handle_cgi_read_error(Client &c, int pipe_fd)
-{
-    // 1) 终止 CGI（只做一次）
-    terminateCgiOnce(c._cgi);
-    // 2) 清理 pipe（只通过 del_cgi_fd 关闭 fd/归零 is_cgi）
-    _epoller->del_event(pipe_fd);
-    _manager->del_cgi_fd(pipe_fd);
-    // 3) 构造错误响应并切 WRITING
-    const HTTPRequest &req = c.parser.getRequest();
-    HTTPResponse err = buildErrorResponse(500);
-    bool ka = computeKeepAlive(req, 500);
-    c.is_keep_alive = ka;
-    applyConnectionHeader(err, ka);
-    c.write_buffer = ResponseBuilder::build(err);
-    c.write_pos = 0;
-    c._state = WRITING;
-    _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
-}
+// bool Server::do_read(Client &c)
+//{
+//     char tmp[4096];
+//     while (true)
+//     {
+//         ssize_t n = recv(c.get_fd(), tmp, sizeof(tmp), 0);
+//         if (n > 0)
+//         {
+//             c.last_activity_ms = Client::now_ms();
+//             bool ok = c.parser.dejaParse(std::string(tmp, n));
+//             if (!ok && c.parser.getRequest().bad_request)
+//             {
+//                 c._state = ERROR;
+//                 const HTTPRequest &req = c.parser.getRequest();
+//                 int code = req.error_code > 0 ? req.error_code : 400;
+//                 HTTPResponse err = buildErrorResponse(code);
+//                 bool ka = computeKeepAlive(req, code);
+//                 c.is_keep_alive = ka;
+//                 applyConnectionHeader(err, ka);
+//                 c.write_buffer = ResponseBuilder::build(err);
+//                 c.write_pos = 0;
+//                 return (true);
+//             }
+//         }
+//         else if (n == 0)
+//         {
+//             c._state = CLOSED;
+//             return (false);
+//         }
+//         else
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 break;
+//             c._state = ERROR;
+//             return (false);
+//         }
+//     }
+//     if (c.parser.getRequest().complet)
+//     {
+//         c._state = PROCESS;
+//         return (true);
+//     }
+//     return (false);
+// }
 
-void Server::handle_cgi_read(Client &c, int pipe_fd)
+// void Server::handle_cgi_read_error(Client &c, int pipe_fd)
+//{
+//     // 1) 终止 CGI（只做一次）
+//     terminateCgiOnce(c._cgi);
+//     // 2) 清理 pipe（只通过 del_cgi_fd 关闭 fd/归零 is_cgi）
+//     _epoller->del_event(pipe_fd);
+//     _manager->del_cgi_fd(pipe_fd);
+//     // 3) 构造错误响应并切 WRITING
+//     const HTTPRequest &req = c.parser.getRequest();
+//     HTTPResponse err = buildErrorResponse(500);
+//     bool ka = computeKeepAlive(req, 500);
+//     c.is_keep_alive = ka;
+//     applyConnectionHeader(err, ka);
+//     c.write_buffer = ResponseBuilder::build(err);
+//     c.write_pos = 0;
+//     c._state = WRITING;
+//     _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+// }
+
+/*void Server::handle_cgi_read(Client &c, int pipe_fd)
 {
-    char buf[4096];
-    while (true)
+    if (!c._cgi)
     {
-        ssize_t n = read(pipe_fd, buf, sizeof(buf));
-
-        if (n > 0 && c._cgi)
-        {
-            c._cgi->append_output(buf, n);
-            c._cgi->last_output_ms = Client::now_ms();
-        }
-        else if (n == 0) // cgi finish
-        {
-            // 1) 尽量回收子进程（不阻塞）
-            if (c._cgi && c._cgi->_pid > 0)
-            {
-                pid_t r = waitpid(c._cgi->_pid, NULL, WNOHANG);
-                if (r > 0)
-                    c._cgi->_pid = -1;
-                // 不要在这里 kill；正常结束不kill
-                // 也不要在这里把 pid=-1（可选），避免破坏其他逻辑
-            }
-            // 2) 先把 CGI 输出拷贝出来
-            std::string cgi_out;
-            if (c._cgi)
-                cgi_out = c._cgi->_output_buffer;
-            // 3) 再清理 pipe（这一步会清 buffer，所以必须放在拷贝之后）
-            _epoller->del_event(pipe_fd);
-            _manager->del_cgi_fd(pipe_fd);
-
-            // 4) build response from copied output
-            HTTPResponse resp;
-            resp = resp.buildResponseFromCGIOutput(cgi_out, c.parser.getRequest().keep_alive);
-            bool ka = computeKeepAlive(c.parser.getRequest(), resp.statusCode);
-            c.is_keep_alive = ka;
-            applyConnectionHeader(resp, ka);
-            c.write_buffer = ResponseBuilder::build(resp);
-            c.write_pos = 0;
-            c._state = WRITING;
-            _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
-            break;
-        }
-        else
-        {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                break;
-            handle_cgi_read_error(c, pipe_fd);
-            break;
-        }
+        handle_pipe_error(pipe_fd);
+        return;
     }
+    bool finished = c._cgi->handle_output();
+    if (finished)
+    {
+        c._cgi->get_exit_status();
+        finalize_cgi_response(c, pipe_fd);
+    }
+    // char buf[4096];
+    // while (true)
+    //{
+    //     ssize_t n = read(pipe_fd, buf, sizeof(buf));
+    //
+    //    if (n > 0 && c._cgi)
+    //    {
+    //        c._cgi->append_output(buf, n);
+    //        c._cgi->last_output_ms = Client::now_ms();
+    //    }
+    //    else if (n == 0) // cgi finish
+    //    {
+    //        // 1) 尽量回收子进程（不阻塞）
+    //        if (c._cgi && c._cgi->_pid > 0)
+    //        {
+    //            pid_t r = waitpid(c._cgi->_pid, NULL, WNOHANG);
+    //            if (r > 0)
+    //                c._cgi->_pid = -1;
+    //            // 不要在这里 kill；正常结束不kill
+    //            // 也不要在这里把 pid=-1（可选），避免破坏其他逻辑
+    //        }
+    //        // 2) 先把 CGI 输出拷贝出来
+    //        std::string cgi_out;
+    //        if (c._cgi)
+    //            cgi_out = c._cgi->_output_buffer;
+    //        // 3) 再清理 pipe（这一步会清 buffer，所以必须放在拷贝之后）
+    //        _epoller->del_event(pipe_fd);
+    //        _manager->del_cgi_fd(pipe_fd);
+    //
+    //        // 4) build response from copied output
+    //        HTTPResponse resp;
+    //        resp = resp.buildResponseFromCGIOutput(cgi_out, c.parser.getRequest().keep_alive);
+    //        bool ka = computeKeepAlive(c.parser.getRequest(), resp.statusCode);
+    //        c.is_keep_alive = ka;
+    //        applyConnectionHeader(resp, ka);
+    //        c.write_buffer = ResponseBuilder::build(resp);
+    //        c.write_pos = 0;
+    //        c._state = WRITING;
+    //        _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+    //        break;
+    //    }
+    //    else
+    //    {
+    //        if (errno == EAGAIN || errno == EWOULDBLOCK)
+    //            break;
+    //        handle_cgi_read_error(c, pipe_fd);
+    //        break;
+    //    }
+    //}
 }
 
 void Server::handle_pipe_error(int fd)
 {
     Client *c = _manager->get_client_by_cgi_fd(fd);
-    if (!c)
+    if (!c || !c->_cgi)
         return;
-    // 1) 终止 CGI（只做一次）
-    terminateCgiOnce(c->_cgi);
-    // 2) 清理 pipe
-    _epoller->del_event(fd);
-    _manager->del_cgi_fd(fd);
-    // 3) 构造错误响应
-    HTTPResponse err = buildErrorResponse(500);
-    bool ka = computeKeepAlive(c->parser.getRequest(), 500);
-    c->is_keep_alive = ka;
-    applyConnectionHeader(err, ka);
-    c->write_buffer = ResponseBuilder::build(err);
-    c->write_pos = 0;
-    c->_state = WRITING;
-    _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
+    c->_cgi->handle_pipe_error();
+    c->_cgi->_state = CGI_Process::ERROR_CGI;
+    finalize_cgi_response(*c, fd);
+    // if (!c)
+    //     return;
+    //// 1) 终止 CGI（只做一次）
+    // terminateCgiOnce(c->_cgi);
+    //// 2) 清理 pipe
+    //_epoller->del_event(fd);
+    //_manager->del_cgi_fd(fd);
+    //// 3) 构造错误响应
+    // HTTPResponse err = buildErrorResponse(500);
+    // bool ka = computeKeepAlive(c->parser.getRequest(), 500);
+    // c->is_keep_alive = ka;
+    // applyConnectionHeader(err, ka);
+    // c->write_buffer = ResponseBuilder::build(err);
+    // c->write_pos = 0;
+    // c->_state = WRITING;
+    //_epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
 }
+void Server::finalize_cgi_response(Client &c, int pipe_fd)
+{
+    if (c._cgi)
+    {
+        c._cgi->handle_output();
+        c._cgi->get_exit_status();
+    }
+    bool keep_alive = c.parser.getRequest().keep_alive;
+    HTTPResponse resp;
+    if (c._cgi)
+        resp = c._cgi->build_response(keep_alive);
+    else
+        resp = buildErrorResponse(500);
+
+    _epoller->del_event(pipe_fd);
+    _manager->del_cgi_fd(pipe_fd);
+
+    if (c._cgi)
+    {
+        c._cgi->terminate();
+        delete c._cgi;
+        c._cgi = NULL;
+    }
+    c.is_cgi = false;
+
+    // 4. 设置 keep-alive
+    bool ka = computeKeepAlive(c.parser.getRequest(), resp.statusCode);
+    c.is_keep_alive = ka;
+    applyConnectionHeader(resp, ka);
+
+    // 5. 切换到写状态
+    c.write_buffer = ResponseBuilder::build(resp);
+    c.write_pos = 0;
+    c._state = WRITING;
+    _epoller->modif_event(c.client_fd, EPOLLOUT | EPOLLET);
+}*/
 
 void Server::handle_socket_error(int fd)
 {
@@ -300,7 +451,7 @@ void Server::handle_socket_error(int fd)
         return;
 
     if (c->is_cgi)
-        terminateCgiOnce(c->_cgi);
+        c->_cgi->terminate();
 
     _epoller->del_event(fd);
     _manager->remove_socket_client(fd);
@@ -320,78 +471,66 @@ bool Server::do_write(Client &c)
     {
         ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
         if (n > 0)
-            c.write_pos += n;
-        else
         {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                return (false);
-            c.is_keep_alive = false; // <- 强制关
-            // c._state = ERROR;
-            return (true);
+            c.write_pos += n;
+            continue;
         }
+        return false;
     }
     return (true); // 写完
 }
+// bool Server::do_write(Client &c)
+//{
+//     while (c.write_pos < c.write_buffer.size())
+//     {
+//         ssize_t n = send(c.get_fd(), c.write_buffer.data() + c.write_pos, c.write_buffer.size() - c.write_pos, 0);
+//         if (n > 0)
+//             c.write_pos += n;
+//         else
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 return (false);
+//             c.is_keep_alive = false; // <- 强制关
+//             // c._state = ERROR;
+//             return (true);
+//         }
+//     }
+//     return (true); // 写完
+// }
 
-void Server::check_cgi_timeout()
+/*void Server::check_cgi_timeout()
 {
+    if (!_manager)
+        return;
     unsigned long long now = Client::now_ms();
     std::vector<int> to_close;
+    std::vector<Client *> timeout_client;
 
     std::map<int, Client *> &cgi_clients = _manager->get_all_cgi_clients();
     for (std::map<int, Client *>::iterator it = cgi_clients.begin(); it != cgi_clients.end(); ++it)
     {
-
         int pipe_fd = it->first; // 约定key就是read pipe fd
         Client *c = it->second;
-        CGI_Process *cgi = c ? c->_cgi : 0;
-
-        bool is_timeout = false;
-        if (!c || !cgi || !c->is_cgi)
+        if (!c || !c->_cgi || !c->is_cgi)
             continue;
-
-        if (!c->_cgi->_output_buffer.empty())
+        if (c->_cgi->check_timeout(now))
         {
-            if ((now - cgi->last_output_ms) > CGI_TIMEOUT_MS)
-                is_timeout = true;
-        }
-        else
-        {
-            if ((now - cgi->start_time_ms) > CGI_TIMEOUT_MS)
-                is_timeout = true;
-        }
-        if (is_timeout)
-        { // 1) 只 kill/waitpid 一次（不在 del_cgi_fd 再做）
-            terminateCgiOnce(cgi);
-            delete cgi;
-            c->_cgi = NULL;
-            c->is_cgi = false;
-            // 2) 准备 504 响应（header在build前写死）
-            HTTPResponse err = buildErrorResponse(504);
-            err.headers["connection"] = "close";
-            if (err.headers.find("content-length") == err.headers.end())
-                err.headers["content-length"] = toString(err.body.size());
-            c->is_keep_alive = false;
-            c->write_buffer = ResponseBuilder::build(err);
-            c->write_pos = 0;
-            c->_state = WRITING;
-            // 3) 修改 client fd 监听写
-            _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
-            // 4) 记录需要清理的 pipe fd（只记录一次）
+            c->_cgi->handle_timeout();
             to_close.push_back(pipe_fd);
+            timeout_client.push_back(c);
         }
     }
     // 统一清理：从 epoll 移除 + manager 清理（close/erase/reset 在 del_cgi_fd 里做）
-    for (size_t i = 0; i < to_close.size(); ++i)
+    for (size_t i = 0; i < timeout_client.size(); ++i)
     {
-        int fd = to_close[i];
-        _epoller->del_event(fd);
-        _manager->del_cgi_fd(fd);
+        finalize_cgi_response(*timeout_client[i], to_close[i]);
     }
-}
+}*/
 
 void Server::check_timeout()
 {
+    if (!_manager)
+        return;
     unsigned long long now = Client::now_ms();
     std::vector<int> timed_out;
 
@@ -407,18 +546,27 @@ void Server::check_timeout()
             !c->parser.getRequest().complet &&
             c->is_timeout(now, ALL_TIMEOUT_MS))
         {
-            HTTPResponse err = buildErrorResponse(408);
-            err.headers["connection"] = "close"; // 强制 close，语义与 B 一致
-            // content-length 一般 buildErrorResponse/ResponseBuilder 会补，但写死也无害
-            if (err.headers.find("content-length") == err.headers.end())
-                err.headers["content-length"] = toString(err.body.size());
-            c->is_keep_alive = false;
-            c->write_buffer = ResponseBuilder::build(err);
-            c->write_pos = 0;
-            c->_state = WRITING;
-            // 让它进入写流程
-            _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
+            timed_out.push_back(it->first);
         }
+    }
+    for (size_t i = 0; i < timed_out.size(); ++i)
+    {
+        int fd = timed_out[i];
+        Client *c = _manager->get_socket_client_by_fd(fd);
+        if (!c)
+            continue;
+
+        HTTPResponse err = buildErrorResponse(408);
+        err.headers["connection"] = "close"; // 强制 close，语义与 B 一致
+        // content-length 一般 buildErrorResponse/ResponseBuilder 会补，但写死也无害
+        if (err.headers.find("content-length") == err.headers.end())
+            err.headers["content-length"] = toString(err.body.size());
+        c->is_keep_alive = false;
+        c->write_buffer = ResponseBuilder::build(err);
+        c->write_pos = 0;
+        c->_state = WRITING;
+        // 让它进入写流程
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
     }
 }
 /**
@@ -430,21 +578,53 @@ void Server::check_timeout()
  *  5. error处理当中，需要对fd的来源进行检查，如果是cgi那边的问题，需要kill结束进程
  */
 
- static bool isMethodAllowed(const std::string& m, const std::vector<std::string>& allow)
+static bool isMethodAllowed(const std::string &m, const std::vector<std::string> &allow)
 {
     for (size_t i = 0; i < allow.size(); ++i)
-        if (allow[i] == m) return true;
+        if (allow[i] == m)
+            return true;
     return false;
 }
 
-bool Server::buildRespForCompletedReq(Client& c, int fd)
+void    Server::handle_cgi_request(Client *c)
+{
+   const HTTPRequest& req = c->parser.getRequest();
+    CGIRequestHandle*   handler = new CGIRequestHandle(req, _default_cfg);
+
+    if (!handler->start(_cgi_manager, _default_cfg, req, c))
+    {
+        c->write_buffer = ResponseBuilder::build(handler->get_response());
+        c->_state = WRITING;
+        _epoller->modif_event(c->client_fd, EPOLLOUT|EPOLLET);
+        delete handler;
+        return ;
+    }
+    c->cgi_handler = handler;
+    c->_state = CGI_RUNNING;
+
+    //add event
+   // uint32_t    events = handler->get_events();
+    if (handler->get_read_fd() >= 0)
+    {
+        _epoller->add_event(handler->get_read_fd(), EPOLLIN|EPOLLET);
+        _cgi_read_map[handler->get_read_fd()] = handler;
+    }
+    if (handler->get_write_fd() >= 0)
+    {
+        _epoller->add_event(handler->get_write_fd(), EPOLLOUT|EPOLLET);
+        _cgi_write_map[handler->get_write_fd()] = handler;
+    }
+    _handler_to_client[handler] = c;
+}
+
+bool Server::buildRespForCompletedReq(Client &c, int fd)
 {
     HTTPRequest req = c.parser.getRequest();
 
     // resolve effective config
     if (_routing)
     {
-        req.effective = _routing->resolve(req, port_nbr);
+        req.effective = _routing->resolve(req, port_nbr, req._rout);
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
@@ -467,17 +647,31 @@ bool Server::buildRespForCompletedReq(Client& c, int fd)
         return (true);
     }
     // CGI
-    if (req.is_cgi_request())
+    if (req._rout.action == ACTION_CGI)
     {
-        c._cgi = new CGI_Process();
-        std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
-        c._cgi->execute(scriptPath, req);
+        handle_cgi_request(&c);
+        return true;
+        /*c._cgi = new CGI_Process();
+        // std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
+        if (!c._cgi->execute(req.effective, req))
+        {
+            HTTPResponse err = buildErrorResponse(500);
+            bool ka = computeKeepAlive(req, 500);
+            c.is_keep_alive = ka;
+            applyConnectionHeader(err, ka);
+            c.write_buffer = ResponseBuilder::build(err);
+            c.write_pos = 0;
+            c._state = WRITING;
+            _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+            delete c._cgi;
+            c._cgi = NULL;
+            return true;
+        }
         c.is_cgi = true;
         _epoller->add_event(c._cgi->_read_fd, EPOLLIN | EPOLLET);
         _manager->bind_cgi_fd(c._cgi->_read_fd, c.client_fd);
-        return (true);
+        return (true);*/
     }
-
     // normal
     HTTPResponse resp = process_request(req);
     bool ka = computeKeepAlive(req, resp.statusCode);
@@ -490,11 +684,131 @@ bool Server::buildRespForCompletedReq(Client& c, int fd)
     return (true);
 }
 
+void    Server::handle_cgi_event(int fd, uint32_t events)
+{
+    CGIRequestHandle* handler = NULL;
+    bool    is_read = false;
+    std::map<int, CGIRequestHandle*>::const_iterator read_it = _cgi_read_map.find(fd);
+    if (read_it != _cgi_read_map.end())
+    {
+        handler = read_it->second;
+        is_read = true;
+    }
+    else
+    {
+        std::map<int, CGIRequestHandle*>::const_iterator write_it = _cgi_write_map.find(fd);
+        if (write_it != _cgi_write_map.end())
+            handler = write_it->second;
+    }
+    if (!handler)
+        return ;
+    bool    need_continue = false;
+    if (is_read && (events & (EPOLLIN|EPOLLET)))
+        need_continue = handler->handle_read();
+    if (!is_read && (events & (EPOLLOUT|EPOLLET)))
+        need_continue = handler->handle_write();
+    if (events & (EPOLLERR | EPOLLRDHUP))
+        need_continue = false;
+
+    if (!need_continue)
+    {
+        _epoller->del_event(fd);
+        if (is_read)
+            _cgi_read_map.erase(fd);
+        else
+            _cgi_write_map.erase(fd);
+    }
+
+    if (handler->is_completed())
+        finish_cgi_request(handler);
+}
+void Server::finish_cgi_request(CGIRequestHandle* handler)
+{
+    if (!handler)
+        return ;
+    std::map<CGIRequestHandle*, Client*>::const_iterator it = _handler_to_client.find(handler);
+    if (it == _handler_to_client.end())
+        return ;
+
+    Client* c = it->second;
+    HTTPResponse    resp = handler->get_response();
+    bool ka = computeKeepAlive(c->parser.getRequest(), resp.statusCode);
+    c->is_keep_alive = ka;
+    applyConnectionHeader(resp, ka);
+
+    c->write_buffer = ResponseBuilder::build(resp);
+    c->write_pos = 0;
+    c->_state = WRITING;
+    c->is_cgi = false;
+
+    _epoller->modif_event(c->client_fd, EPOLLOUT|EPOLLET);
+
+    cleanup_cgi_handler(handler);
+}
+void Server::cleanup_cgi_handler(CGIRequestHandle* handler)
+{
+    if (!handler)
+        return ;
+    int read_fd = handler->get_read_fd();
+    if (read_fd >= 0)
+    {
+        _epoller->del_event(read_fd);
+        _cgi_read_map.erase(read_fd);
+    }
+
+    int write_fd = handler->get_write_fd();
+    if (write_fd >= 0)
+    {
+        _epoller->del_event(write_fd);
+        _cgi_write_map.erase(write_fd);
+    }
+
+    //remove in map
+    std::map<CGIRequestHandle*, Client*>::iterator it = _handler_to_client.find(handler);
+    if (it != _handler_to_client.end())
+    {
+        Client *c = it->second;
+        if (c->cgi_handler == handler)
+            c->cgi_handler = NULL;
+        _handler_to_client.erase(it);
+    }
+    delete handler;
+}
+
+void    Server::check_cgi_timeout()
+{
+    unsigned long long now = Client::now_ms();
+    std::vector<CGIRequestHandle*>  timed_out;
+
+    for(std::map<CGIRequestHandle*, Client*>::iterator it = _handler_to_client.begin();
+            it != _handler_to_client.end(); ++it)
+    {
+        CGIRequestHandle *handler = it->first;
+        CGI_Process* proc = handler->get_process();
+
+        if (proc->is_running())
+        {
+            unsigned long long diff = now - proc->start_time_ms;
+            if (!proc->has_output && diff > START_TIMEOUT)
+                timed_out.push_back(handler);
+            else if (proc->has_output && ((now - proc->last_output_ms) > EXECUTION_TIMEOUT))
+                timed_out.push_back(handler);
+            else if (diff > EXECUTION_TIMEOUT *2)
+                timed_out.push_back(handler);
+        }
+        for(size_t i = 0; i < timed_out.size(); ++i)
+        {
+            CGIRequestHandle    *handler = timed_out[i];
+            finish_cgi_request(handler);
+        }
+    }
+}
+
 void Server::run()
 {
     set_non_block_fd(socketfd);
     _epoller->add_event(socketfd, EPOLLIN | EPOLLET);
-    while (true)
+    while (g_running)
     {
         int nfds = _epoller->wait(Timeout);
         check_cgi_timeout();
@@ -508,19 +822,10 @@ void Server::run()
                 handle_connection();
                 continue;
             }
-            if (_manager->is_cgi_pipe(fd))
+            if (_cgi_read_map.count(fd) || _cgi_write_map.count(fd))
             {
-                Client *c = _manager->get_client_by_cgi_fd(fd);
-                if (c && (events & (EPOLLIN | EPOLLHUP)))
-                {
-                    handle_cgi_read(*c, fd);
-                    continue;
-                }
-                if (c && (events & (EPOLLERR | EPOLLRDHUP)))
-                {
-                    handle_pipe_error(fd);
-                    continue;
-                }
+                handle_cgi_event(fd, events);
+                continue;
             }
             else // socket client
             {
@@ -545,7 +850,6 @@ void Server::run()
                 }
                 if (events & EPOLLOUT)
                 {
-                    TRACE();
                     // do_write == false: 只是 EAGAIN，还没写完，继续等下一次 EPOLLOUT
                     if (!do_write(*c))
                         continue;
@@ -582,7 +886,7 @@ void Server::run()
                             break; // 还缺字节，回去等 EPOLLIN
                         c->_state = PROCESS;
                         buildRespForCompletedReq(*c, fd); // 这个函数内部应该把 state=WRITING 并 modif_event(EPOLLOUT)
-                        break; // 一次只准备一个 response，保持顺序
+                        break;                            // 一次只准备一个 response，保持顺序
                     }
                     // 没准备出新 response，就回去读
                     if (!c->is_cgi && (c->_state != WRITING || c->write_buffer.empty()))
@@ -612,7 +916,6 @@ void Server::run()
                         // 尝试直接写一次（即使没有 EPOLLOUT）
                         if (do_write(*c))
                         {
-                            TRACE();
                             _manager->remove_socket_client(fd);
                             _epoller->del_event(fd);
                             close(fd);
@@ -631,7 +934,7 @@ void Server::run()
     }
 }
 
-bool Server::load_config(const std::string& path)
+bool Server::load_config(const std::string &path)
 {
     ConfigTokenizer tok;
     if (!tok.read_file(path))
@@ -660,11 +963,32 @@ bool Server::load_config(const std::string& path)
         throw std::runtime_error("config: no server block found");
     // 默认 cfg：用于“还没解析 Host 时”的兜底
     // 这里用第一个 server 的 defaults
-    _default_cfg.root = _rt_servers[0].root;
-    _default_cfg.index = _rt_servers[0].index;
-    _default_cfg.autoindex = _rt_servers[0].autoindex;
-    _default_cfg.allowed_methods = _rt_servers[0].allowed_methods;
-    _default_cfg.error_pages = _rt_servers[0].error_page;
-    _default_cfg.max_body_size = _rt_servers[0].client__max_body_size;
+    //_default_cfg.root = _rt_servers[0].root;
+    //_default_cfg.index = _rt_servers[0].index;
+    //_default_cfg.autoindex = _rt_servers[0].autoindex;
+    //_default_cfg.allowed_methods = _rt_servers[0].allowed_methods;
+    //_default_cfg.error_pages = _rt_servers[0].error_page;
+    //_default_cfg.max_body_size = _rt_servers[0].client__max_body_size;
+    if (!_rt_servers.empty())
+    {
+        const ServerRuntimeConfig &first_server = _rt_servers[0];
+        _default_cfg.server_port = first_server.port;
+        _default_cfg.server_name = first_server.server_name;
+        _default_cfg.root = first_server.root;
+        _default_cfg.index = first_server.index;
+        _default_cfg.autoindex = first_server.autoindex;
+        _default_cfg.allowed_methods = first_server.allowed_methods;
+        _default_cfg.error_pages = first_server.error_page;
+        _default_cfg.max_body_size = first_server.client__max_body_size;
+
+        // 设置默认值
+        _default_cfg.alias = "";
+        _default_cfg.location_path = "";
+        _default_cfg.has_return = false;
+        _default_cfg.return_code = 302;
+        _default_cfg.return_url = "";
+        _default_cfg.is_cgi = false;
+        _default_cfg.upload_path = "";
+    }
     return (true);
 }

@@ -54,10 +54,7 @@ class   ConfigTokenizer
 
         //debug
         void    print_tokens() const;
-
-        //
         const std::vector<Token>& getTokens() const { return _tokens; }
-
 };
 
 

@@ -1,5 +1,5 @@
-#include "ConfigParser.hpp"
-#include "ConfigUtils.hpp"
+#include "Config/hpp/ConfigParser.hpp"
+#include "HTTP/hpp/HTTPUtils.hpp" 
 #include <stdexcept>
 
 ConfigParser::ConfigParser(const std::vector<Token>& tokens)
@@ -25,8 +25,13 @@ const Token& ConfigParser::next()
 void ConfigParser::expect(Tokentype type, const std::string& err_msg)
 {
     if (current().type != type)
-        throw std::runtime_error(err_msg + " at line " + std::to_string(current().line) +
-                                 " col " + std::to_string(current().col));
+    {
+        throw std::runtime_error(
+            err_msg + " at line " + toString(current().line) +
+            " col " + toString(current().col)
+        );
+
+    }
     next();
 }
 
@@ -37,10 +42,8 @@ ServerConfig ConfigParser::parse_server()
 {
     ServerConfig server;
 
-    expect(TYPE_WORD, "Expected 'server'");
-    if (current().value != "server")
-        throw std::runtime_error("'server' keyword expected at line " + std::to_string(current().line));
-
+    if (current().type != TYPE_WORD || current().value != "server")
+        throw std::runtime_error("'server' keyword expected at line " + toString(current().line));
     next();
     expect(TYPE_L_CURLY, "Expected '{' after server");
 
@@ -68,12 +71,14 @@ LocationConfig ConfigParser::parse_location()
 {
     LocationConfig loc;
 
-    expect(TYPE_WORD, "Expected 'location'");
+    // expect(TYPE_WORD, "Expected 'location'");
+    if (current().type != TYPE_WORD || current().value != "location")
+        throw std::runtime_error("'location' expected at line " + toString(current().line));
     next();
 
     // Path
     if (current().type != TYPE_WORD)
-        throw std::runtime_error("Expected path after location at line " + std::to_string(current().line));
+        throw std::runtime_error("Expected path after location at line " + toString(current().line));
     loc.path = current().value;
     next();
 
@@ -95,7 +100,7 @@ LocationConfig ConfigParser::parse_location()
 void ConfigParser::parse_directives(std::map<std::string, std::vector<std::string> >& directives)
 {
     if (current().type != TYPE_WORD)
-        throw std::runtime_error("Expected directive name at line " + std::to_string(current().line));
+        throw std::runtime_error("Expected directive name at line " + toString(current().line));
 
     std::string key = current().value;
     next();
@@ -124,7 +129,7 @@ std::vector<ServerConfig> ConfigParser::parse()
         }
         else
         {
-            throw std::runtime_error("Unexpected token '" + current().value + "' at line " + std::to_string(current().line));
+            throw std::runtime_error("Unexpected token '" + current().value + "' at line " + toString(current().line));
         }
     }
 

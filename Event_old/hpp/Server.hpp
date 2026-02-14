@@ -12,8 +12,6 @@
 #include "Config/hpp/EffectiveConfig.hpp"
 #include "Config/hpp/ServerConfig.hpp"
 #include "Method_Handle/hpp/FileUtils.hpp"
-#include "CGI/hpp/CGIManager.hpp"
-#include "Method_Handle/hpp/CGIRequestHandle.hpp"
 #include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -23,15 +21,13 @@
 #include <cerrno>
 #include <ctime>
 #include <string>
-#include <signal.h>
-struct Client;
+
+struct  Client;
 class Epoller;
 class ResponseBuilder;
 class ClientManager;
 class HTTPResponse;
 class Session_manager;
-class CGIManager;
-class CGIRequestHandle;
 
 class Server
 {
@@ -40,22 +36,19 @@ public:
     ~Server();
     bool init_sockets();
     void run();
-    static void set_non_block_fd(int fd);
+    void set_non_block_fd(int fd);
     bool handle_connection();
 
+    void handle_pipe_error(int fd);
     void handle_socket_error(int fd);
 
-    void    handle_cgi_request(Client* c);
-    void    handle_cgi_event(int fd, uint32_t events);
-    void    finish_cgi_request(CGIRequestHandle* handler);
-    void    cleanup_cgi_handler(CGIRequestHandle* handler);
-
-    // void handle_cgi_read_error(Client &c, int pipe_fd);
+    void handle_cgi_read(Client &c, int pipe_fd);
+    void handle_cgi_read_error(Client &c, int pipe_fd);
 
     bool do_read(Client &c);
     bool do_write(Client &c);
 
-    // check timeout
+    //check timeout
     void close_client(int fd);
 
     void check_timeout();
@@ -63,29 +56,21 @@ public:
 
     HTTPResponse process_request(const HTTPRequest &req);
 
-    void cleanup();
+    void    cleanup();
     // void process_request(Client &c);
 
-    bool buildRespForCompletedReq(Client &c, int fd);
-    bool load_config(const std::string &path);
-    void finalize_cgi_response(Client &c, int pipe_fd);
-    static void signal_handler(int sig);
-
+    bool buildRespForCompletedReq(Client& c, int fd);
+    bool load_config(const std::string& path);
 private:
     // class de tous les configuration de server
     int port_nbr;
     int socketfd;
-    static volatile sig_atomic_t g_running;
-    Epoller *_epoller;
-    ClientManager *_manager;
-    CGIManager  _cgi_manager;
-    std::map<int, CGIRequestHandle*> _cgi_read_map;
-    std::map<int, CGIRequestHandle*>    _cgi_write_map;
-    std::map<CGIRequestHandle*, Client*>    _handler_to_client;
-    Session_manager *_session_cookie;
+    Epoller* _epoller;
+    ClientManager* _manager;
+    Session_manager* _session_cookie;
 
     std::vector<ServerRuntimeConfig> _rt_servers;
-    Routing *_routing;
+    Routing* _routing;
     EffectiveConfig _default_cfg;
 };
 

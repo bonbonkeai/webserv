@@ -4,7 +4,8 @@
 #include <string>
 #include <map>
 #include <vector>
-#include "LocationConfig.hpp"
+#include <cctype>
+#include "Config/hpp/LocationConfig.hpp"
 
 /* Serveur Brut(parser)*/
 struct ServerConfig
@@ -19,6 +20,7 @@ struct ServerConfig
 struct ServerRuntimeConfig
 {
     std::string host;
+    std::string server_name;
     int listen;
     int port;
     std::string root;
@@ -26,7 +28,7 @@ struct ServerRuntimeConfig
     size_t client__max_body_size;
     std::vector<std::string> index;
     std::vector<std::string> allowed_methods;
-    std::map<int, std::string> error_page;
+    std::map<int, ErrorPageRule> error_page;
     std::vector<LocationRuntimeConfig> locations;
 
     bool matchesHost(const std::string& reqHost) const 
@@ -37,7 +39,17 @@ struct ServerRuntimeConfig
         size_t pos = cleanH.find(":");
         if (pos != std::string::npos)
             cleanH = cleanH.substr(0,pos);
-        return cleanH == host;
+        if (!server_name.empty())
+        {
+            std::string lhs = cleanH;
+            std::string rhs = server_name;
+            for (size_t i = 0; i < lhs.size(); ++i)
+                lhs[i] = static_cast<char>(std::tolower(lhs[i]));
+            for (size_t i = 0; i < rhs.size(); ++i)
+                rhs[i] = static_cast<char>(std::tolower(rhs[i]));
+            return lhs == rhs;
+        }
+        return (true);
     }
 };
 

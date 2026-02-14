@@ -7,7 +7,6 @@
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "CGI/hpp/CGIProcess.hpp"
 #include "Config/hpp/Routing.hpp"
-#include "Method_Handle/hpp/CGIRequestHandle.hpp"
 #include <iostream>
 #include <map>
 #include <iterator>
@@ -16,7 +15,6 @@
 #include <sys/time.h>
 
 class CGI_Process;
-class CGIRequestHandle;
 /*表示一个客户端连接：
 成员包括：
 readBuffer / writeBuffer
@@ -38,8 +36,7 @@ enum Clientstate
     PROCESS, // do the request
     WRITING,
     CLOSED,
-    ERROR,
-    CGI_RUNNING
+    ERROR
 };
 
 struct Client
@@ -57,9 +54,9 @@ struct Client
     // cgi
     CGI_Process *_cgi;
     bool is_cgi;
-    CGIRequestHandle* cgi_handler;
 
     // timeout
+    bool timeout;
     time_t last_active;
     unsigned long long last_activity_ms;
     bool is_timeout(unsigned long long now_ms, unsigned long long timeout_ms) const
@@ -77,7 +74,6 @@ struct Client
           is_keep_alive(false),
           _cgi(NULL),
           is_cgi(false),
-          cgi_handler(NULL),
           last_activity_ms(0)
     {
         read_buffer.reserve(4096);
@@ -109,15 +105,23 @@ public:
     void remove_socket_client(int fd);
 
     // gestion cgi client
+    Client *get_client_by_cgi_fd(int pipe_fd);
+    bool is_cgi_pipe(int pipe_fd);
+    void del_cgi_fd(int pipe_fd);
+    void bind_cgi_fd(int pipe_fd, int client_fd);
 
     std::map<int, Client *> &get_all_socket_clients()
     {
         return _clients;
     }
-    
-    void    clear_all_clients();
+    std::map<int, Client *> &get_all_cgi_clients()
+    {
+        return _cgi_manager;
+    }
+
 private:
     std::map<int, Client *> _clients;     // socket_fd -> client*
+    std::map<int, Client *> _cgi_manager; // pipe_fd -> client*
 };
 
 #endif

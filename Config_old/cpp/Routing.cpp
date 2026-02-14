@@ -72,7 +72,7 @@ const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req, int listen_p
         }
     }
     // 5) 逐 server 匹配
-    const ServerRuntimeConfig *first_port_match = NULL;
+    const ServerRuntimeConfig* first_port_match = NULL;
     for (size_t i = 0; i < _serveurs.size(); ++i)
     {
         if (_serveurs[i].port != listen_port)
@@ -86,6 +86,8 @@ const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req, int listen_p
         return *first_port_match;
     return _serveurs[0];
 }
+
+
 
 // -------------------
 // Retourne la location la plus spécifique (longest prefix match)
@@ -102,41 +104,30 @@ const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &s
         // Vérifie si l'URI commence par le path
         if (uri.compare(0, path.size(), path) == 0)
         {
-            // prefix 的匹配检查
-            if (uri.size() == path.size() || uri[path.size()] == '/')
+            if (path.size() > bestLen)
             {
-                if (path.size() > bestLen)
-                {
-                    best = &server.locations[i];
-                    bestLen = path.size();
-                }
+                best = &server.locations[i];
+                bestLen = path.size();
             }
         }
     }
     return best;
 }
 
-/*EffectiveConfig Routing::resolve(const HTTPRequest &req, int listen_port) const
+EffectiveConfig Routing::resolve(const HTTPRequest& req, int listen_port) const
 {
-    const ServerRuntimeConfig &server = selectS(req, listen_port);
+    const ServerRuntimeConfig& server = selectS(req, listen_port);
     // const LocationRuntimeConfig* loc = matchLocation(server, req.uri);
-    const LocationRuntimeConfig *loc = matchLocation(server, req.path);
+    const LocationRuntimeConfig* loc = matchLocation(server, req.path);
 
     EffectiveConfig cfg;
 
-    // server info
-    cfg.server_port = server.port;
-    cfg.server_name = server.server_name;
-
     cfg.root = (loc && loc->has_root) ? loc->root : server.root;
-    // alias traitement
-    cfg.alias = (loc && loc->has_alias) ? loc->alias : "";
-
     cfg.index = (loc && loc->has_index) ? loc->index : server.index;
     cfg.autoindex = (loc && loc->has_autoindex) ? loc->autoindex : server.autoindex;
     cfg.allowed_methods = (loc && loc->has_methodes)
-                              ? loc->allow_methodes
-                              : server.allowed_methods;
+        ? loc->allow_methodes
+        : server.allowed_methods;
 
     cfg.error_pages = server.error_page;
     if (loc && loc->has_error_pages)
@@ -146,12 +137,11 @@ const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &s
             cfg.error_pages[it->first] = it->second;
     }
     cfg.max_body_size = (loc && loc->has_client_max_body_size)
-                            ? loc->client_max_body_size
-                            : server.client__max_body_size;
+        ? loc->client_max_body_size
+        : server.client__max_body_size;
 
     cfg.is_cgi = (loc && loc->has_cgi);
     cfg.cgi_exec = (loc && loc->has_cgi) ? loc->cgi_exec : std::map<std::string, std::string>();
-    cfg.cgi_extensions = (loc && loc->cgi_extensions.empty()) ? loc->cgi_extensions : std::set<std::string>();
 
     cfg.has_return = (loc && loc->has_return);
     if (cfg.has_return)
@@ -160,101 +150,5 @@ const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &s
         cfg.return_url = loc->return_url;
     }
 
-    // location path
-    cfg.location_path = (loc && loc->has_upload_path) ? loc->upload_path : "";
-    return cfg;
-}*/
-
-std::string Routing::get_extension(const std::string &fs_path)
-{
-    size_t slash = fs_path.find_last_of('/');
-    size_t point = fs_path.find_last_of('.');
-
-    if (point == std::string::npos)
-        return "";
-    if (slash != std::string::npos && point < slash)
-        return "";
-    return fs_path.substr(point);
-}
-
-bool Routing::extension_match(const std::string &fs_path, std::set<std::string> &cgi_extension)
-{
-    std::string ext = get_extension(fs_path);
-
-    if (ext.empty())
-        return false;
-    return cgi_extension.find(ext) != cgi_extension.end();
-}
-
-EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult &rout) const
-{
-    const ServerRuntimeConfig &server = selectS(req, listen_port);
-    const LocationRuntimeConfig *loc = matchLocation(server, req.path);
-    EffectiveConfig cfg;
-
-    // herite from serverruntimeonfig
-    cfg.server_port = server.port;
-    cfg.server_name = server.server_name;
-
-    // root or alias
-    cfg.root = (loc && loc->has_root) ? loc->root : server.root;
-    cfg.alias = (loc && loc->has_alias) ? loc->alias : "";
-
-    cfg.index = (loc && loc->has_index) ? loc->index : server.index;
-    cfg.autoindex = (loc && loc->has_autoindex) ? loc->autoindex : server.autoindex;
-
-    cfg.allowed_methods = (loc && loc->has_methodes) ? loc->allow_methodes : server.allowed_methods;
-    cfg.error_pages = server.error_page;
-    if (loc && loc->has_error_pages)
-    {
-        for (std::map<int, ErrorPageRule>::const_iterator it = loc->error_pages.begin();
-             it != loc->error_pages.end(); ++it)
-            cfg.error_pages[it->first] = it->second;
-    }
-    cfg.max_body_size = (loc && loc->has_client_max_body_size)
-                            ? loc->client_max_body_size
-                            : server.client__max_body_size;
-    // cgi
-    cfg.is_cgi = (loc && loc->has_cgi);
-    cfg.cgi_exec = (loc && loc->has_cgi) ? loc->cgi_exec : std::map<std::string, std::string>();
-    cfg.cgi_extensions = (loc && !loc->cgi_extensions.empty()) ? loc->cgi_extensions : std::set<std::string>();
-
-    // upload_path
-    cfg.upload_path = (loc && loc->has_upload_path) ? loc->upload_path : server.upload_path;
-    cfg.has_upload_path = (loc && loc->has_upload_path) || !server.upload_path.empty();
-
-    cfg.has_return = (loc && loc->has_return);
-    if (cfg.has_return)
-    {
-        cfg.return_code = loc->return_code;
-        cfg.return_url = loc->return_url;
-        rout.action = ACTION_REDIRECT;
-        rout.redirect_code = cfg.return_code;
-        rout.redirect_url = cfg.return_url;
-        return cfg;
-    }
-
-    // fs_path
-    if (!cfg.alias.empty())
-    {
-        std::string suffix = req.path.substr(loc ? loc->path.size() : 0);
-        rout.fs_path = cfg.alias + suffix;
-    }
-    else
-        rout.fs_path = cfg.root + req.path;
-
-    if (cfg.is_cgi && extension_match(rout.fs_path, cfg.cgi_extensions))
-        rout.action = ACTION_CGI;
-
-    // upload action
-    else if (req.method == "POST")
-    {
-        if(!cfg.upload_path.empty())
-            rout.action = ACTION_UPLOAD;
-        else
-            rout.action = ACTION_CGI;//post 有 cgi
-    }
-    else
-        rout.action = ACTION_STATIC;
     return cfg;
 }

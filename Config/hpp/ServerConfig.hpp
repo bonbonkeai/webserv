@@ -31,6 +31,9 @@ struct ServerRuntimeConfig
     std::map<int, ErrorPageRule> error_page;
     std::vector<LocationRuntimeConfig> locations;
 
+    //upload path
+    std::string upload_path;
+
     bool matchesHost(const std::string& reqHost) const 
     {
         if(reqHost.empty())

@@ -3,13 +3,15 @@
 
 #include <string>
 #include <vector>
-#include "HTTPResponse.hpp"
-#include "HTTPRequest.hpp"
-#include "ConfigParser.hpp"
-#include "ConfigTokenizer.hpp"
-#include "ServerConfig.hpp"
-#include "EffectiveConfig.hpp"
-#include "ConfigUtils.hpp"
+#include <cstddef>   // for NULL
+#include "HTTP/hpp/HTTPResponse.hpp"
+#include "HTTP/hpp/HTTPRequest.hpp"
+#include "HTTP/hpp/HTTPUtils.hpp" 
+#include "Config/hpp/ConfigParser.hpp"
+#include "Config/hpp/ConfigTokenizer.hpp"
+#include "Config/hpp/ServerConfig.hpp"
+#include "Config/hpp/EffectiveConfig.hpp"
+#include "Config/hpp/ConfigUtils.hpp"
 
 class Routing
 {
@@ -19,8 +21,8 @@ class Routing
     public:
         Routing(const std::vector<ServerRuntimeConfig>& serveurs);
         ~Routing(){};
-        const ServerRuntimeConfig& selectS(const HTTPRequest& request) const;
-        EffectiveConfig resolve(const HTTPRequest& request) const;
+        const ServerRuntimeConfig& selectS(const HTTPRequest& request, int listen_port) const;
+        EffectiveConfig resolve(const HTTPRequest& request, int listen_port) const;
         //const LocationConfig* matchLocation(const ServerConfig& server, const std::string& uri);
         const LocationRuntimeConfig* matchLocation(const ServerRuntimeConfig &server, const std::string &uri) const;
 
