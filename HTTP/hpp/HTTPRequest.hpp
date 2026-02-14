@@ -18,6 +18,25 @@ body
 //只是一个容器存HTTP Parser解析后的结果
 */
 
+enum Routeaction
+{
+        ACTION_REDIRECT,
+        ACTION_CGI,
+        ACTION_AUTOINDEX,
+        ACTION_UPLOAD,
+        ACTION_STATIC,
+};
+struct RouteResult
+{
+        Routeaction action;
+        std::string fs_path; 
+
+        int redirect_code;
+        std::string redirect_url;
+        //cgi
+        std::string script_name;
+        std::string path_info;
+};
 
 class HTTPRequest
 {
@@ -55,6 +74,9 @@ public:
         //Config
 	EffectiveConfig effective;
 	bool	has_effective;
+
+        // route result
+        RouteResult _rout;
 };
 
 #endif
