@@ -99,6 +99,7 @@ bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2], const Eff
 bool CGI_Process::setup_parent_process(int pipe_in[2], int pipe_out[2], const HTTPRequest &req)
 {
 
+    (void)req;
     close(pipe_in[0]);
     close(pipe_out[1]);
 
@@ -208,7 +209,7 @@ bool    CGI_Process::write_body(const std::string &body)
         return true;
     }
 
-    size_t  remaind = body.size() - write_pos;
+    // size_t  remaind = body.size() - write_pos;
     // ssize_t n = write(_write_fd, body.c_str() + write_pos, remaind);
 
     // if (n > 0)

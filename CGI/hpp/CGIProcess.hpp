@@ -19,6 +19,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <string>
+#include <errno.h>
 #define EXECUTION_TIMEOUT 10000ULL
 #define START_TIMEOUT 5000ULL
 
