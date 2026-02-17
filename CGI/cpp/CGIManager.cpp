@@ -121,6 +121,7 @@ void CGIManager::kill_and_remove(CGI_Process* proc)
 {
     if (!proc)
         return;
+    //proc->terminate();
     remove_and_delete(proc);
     proc->terminate();
     delete proc;

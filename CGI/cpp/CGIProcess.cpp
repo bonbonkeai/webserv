@@ -279,25 +279,23 @@ bool CGI_Process::read_output(std::string &buffer)
     else
     {
         if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
-            return true; // 继续等下次可读
+            return (true); //继续等下次可读
         _state = CGI_Process::ERROR;
         close(_read_fd);
         _read_fd = -1;
-        return false;
+        return (false);
     }
 }
 bool    CGI_Process::write_body(const std::string &body)
 {
     if (_write_fd < 0 || _state != CGI_Process::RUNNING)
-        return false;
-    
-    if (write_pos >= body.size()) //finish writing
+        return (false);
+    if (write_pos >= body.size())
     {
         close(_write_fd);
         _write_fd = -1;
-        return true;
+        return (true);
     }
-
     // size_t  remaind = body.size() - write_pos;
     // ssize_t n = write(_write_fd, body.c_str() + write_pos, remaind);
 
@@ -320,7 +318,6 @@ bool    CGI_Process::write_body(const std::string &body)
     //     return false;
     // }
     ssize_t n = write(_write_fd, body.data() + write_pos, body.size() - write_pos);
-
     if (n > 0)
     {
         write_pos += n;
@@ -328,17 +325,17 @@ bool    CGI_Process::write_body(const std::string &body)
         {
             close(_write_fd);
             _write_fd = -1;
-            return true;//写完
+            return (true);//写完
         }
-        return false;//还没写完
+        return (false);//还没写完
     }
 
     if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
-        return false;//暂时写不了，等下一次 EPOLLOUT
+        return (false);//暂时写不了，等下一次 EPOLLOUT
     _state = CGI_Process::ERROR;
     close(_write_fd);
     _write_fd = -1;
-    return false;
+    return (false);
 }
 /*bool CGI_Process::check_timeout(unsigned long long now)
 {
