@@ -1,3 +1,32 @@
+// #include "Event/hpp/Client.hpp"
+// #include <utility>
+
+// ClientManager::ClientManager()
+// {
+// }
+// ClientManager::~ClientManager()
+// {
+// }
+
+// void ClientManager::add_socket_client(int fd)
+// {
+//     // _clients.emplace(fd, Client(fd));//98不能用这个吧
+//     _clients.insert(std::make_pair(fd, Client(fd)));
+// }
+
+// Client &ClientManager::get_client(int fd)
+// {
+//     std::map<int, Client>::iterator it = _clients.find(fd);
+//     if (it != _clients.end())
+//         return it->second;
+//     throw std::runtime_error("Client not found");
+// }
+
+// void ClientManager::remove_socket_client(int fd)
+// {
+//     if (_clients.find(fd) != _clients.end())
+//         _clients.erase(fd);
+// }
 
 #include "Event/hpp/Client.hpp"
 #include <utility>
@@ -14,16 +43,14 @@ void Client::reset()
     parser.resetForNextRequest();
     is_cgi = false;
     last_activity_ms = now_ms();
-    // if (_cgi)
-    // {
-    //     _cgi->terminate();
-    //     delete _cgi;
-    //     _cgi = NULL;
-    // }
-    // if (cgi_handler)
-    //     cgi_handler = NULL;
-    if(_cgi)
+    if (_cgi)
+    {
+        _cgi->terminate();
+        delete _cgi;
         _cgi = NULL;
+    }
+    if (cgi_handler)
+        cgi_handler = NULL;
 }
 
 ClientManager::ClientManager()

@@ -57,7 +57,7 @@ struct Client
     // cgi
     CGI_Process *_cgi;
     bool is_cgi;
-    // CGIRequestHandle* cgi_handler;
+    CGIRequestHandle* cgi_handler;
 
     // timeout
     time_t last_active;
@@ -77,6 +77,7 @@ struct Client
           is_keep_alive(false),
           _cgi(NULL),
           is_cgi(false),
+          cgi_handler(NULL),
           last_activity_ms(0)
     {
         read_buffer.reserve(4096);

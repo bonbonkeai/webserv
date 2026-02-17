@@ -5,7 +5,7 @@
 #include "../../HTTP/hpp/HTTPResponse.hpp"
 #include "Config/hpp/EffectiveConfig.hpp"
 #include "HTTP/hpp/ErrorResponse.hpp"
-#include "Method_Handle/hpp/CGIRequestHandle.hpp"
+// #include "Method_Handle/hpp/CGIRequestHandle.hpp"
 
 #include <iostream>
 #include <vector>
@@ -86,6 +86,8 @@ public:
         return _state == CGI_Process::TIMEOUT;
     }
     void set_non_block_fd(int fd);
+
+    
 
 };
 

@@ -19,19 +19,33 @@ CGI_Process::~CGI_Process()
 }
 
 
+// bool CGI_Process::create_pipe(int pipe_in[2], int pipe_out[2])
+// {
+//     if (pipe(pipe_in) < 0 || pipe(pipe_out) < 0)
+//     {
+//         if (pipe_in[0] >= 0)
+//         {
+//             close(pipe_in[0]);
+//             close(pipe_in[1]);
+//         }
+//         return false;
+//     }
+//     return true;
+// }
 bool CGI_Process::create_pipe(int pipe_in[2], int pipe_out[2])
 {
-    if (pipe(pipe_in) < 0 || pipe(pipe_out) < 0)
+    pipe_in[0]=pipe_in[1]=pipe_out[0]=pipe_out[1]=-1;
+    if (pipe(pipe_in) < 0)
+        return false;
+    if (pipe(pipe_out) < 0)
     {
-        if (pipe_in[0] >= 0)
-        {
-            close(pipe_in[0]);
-            close(pipe_in[1]);
-        }
+        close(pipe_in[0]);
+        close(pipe_in[1]);
         return false;
     }
     return true;
 }
+
 void CGI_Process::close_pipes(int pipe_in[2], int pipe_out[2])
 {
     close(pipe_in[0]);
@@ -142,18 +156,37 @@ bool CGI_Process::setup_parent_process(int pipe_in[2], int pipe_out[2], const HT
     return true;
 }
 
+// void CGI_Process::terminate()
+// {
+//     if (_pid > 0)
+//     {
+//         kill(_pid, SIGKILL);
+//         waitpid(_pid, NULL, 0);
+//         _pid = -1;
+//     }
+//     if (_read_fd >= 0)
+//     {
+//         close(_read_fd);
+//         _read_fd = -1;
+//     }
+// }
 void CGI_Process::terminate()
 {
     if (_pid > 0)
     {
         kill(_pid, SIGKILL);
-        waitpid(_pid, NULL, 0);
+        waitpid(_pid, NULL, WNOHANG);
         _pid = -1;
     }
     if (_read_fd >= 0)
     {
         close(_read_fd);
         _read_fd = -1;
+    }
+    if (_write_fd >= 0)
+    {
+        close(_write_fd);
+        _write_fd = -1;
     }
 }
 
@@ -202,7 +235,7 @@ bool    CGI_Process::write_body(const std::string &body)
     if (_write_fd < 0 || _state != CGI_Process::RUNNING)
         return false;
     
-    if (write_pos > body.size()) //finish writing
+    if (write_pos >= body.size()) //finish writing
     {
         close(_write_fd);
         _write_fd = -1;

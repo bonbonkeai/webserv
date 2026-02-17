@@ -34,6 +34,10 @@ public:
     std::vector<CGI_Process*> get_timeout_cgi(){
         return _timeout_cgi;
     }
+
+    void remove_and_delete(CGI_Process* proc);
+    void kill_and_remove(CGI_Process* proc);
+    std::vector<CGI_Process*>& all_processes();
 };
 
 #endif

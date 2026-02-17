@@ -109,3 +109,25 @@ void CGIManager::cleanup_process()
     }
 }
 
+void CGIManager::remove_and_delete(CGI_Process* proc)
+{
+    if (!proc)
+        return;
+    remove_process(proc);
+    delete proc;
+}
+
+void CGIManager::kill_and_remove(CGI_Process* proc)
+{
+    if (!proc)
+        return;
+    remove_and_delete(proc);
+    proc->terminate();
+    delete proc;
+    
+}
+
+std::vector<CGI_Process*>& CGIManager::all_processes()
+{
+    return _all_process;
+}

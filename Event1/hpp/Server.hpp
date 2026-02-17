@@ -3,21 +3,17 @@
 
 #include "Event/hpp/EpollManager.hpp"
 #include "Event/hpp/Client.hpp"
-
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include "HTTP/hpp/ResponseBuilder.hpp"
 #include "HTTP/hpp/HTTPResponse.hpp"
 #include "HTTP/hpp/RequestFactory.hpp"
 #include "HTTP/hpp/Session.hpp"
-
 #include "Config/hpp/Routing.hpp"
 #include "Config/hpp/EffectiveConfig.hpp"
 #include "Config/hpp/ServerConfig.hpp"
-
 #include "Method_Handle/hpp/FileUtils.hpp"
-// #include "Method_Handle/hpp/CGIRequestHandle.hpp"
 #include "CGI/hpp/CGIManager.hpp"
-
+#include "Method_Handle/hpp/CGIRequestHandle.hpp"
 #include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -28,66 +24,81 @@
 #include <ctime>
 #include <string>
 #include <signal.h>
-
-#include <vector>
-#include <map>
-
+struct Client;
 class Epoller;
+class ResponseBuilder;
 class ClientManager;
+class HTTPResponse;
 class Session_manager;
+class CGIManager;
+class CGIRequestHandle;
 
 class Server
 {
 public:
     Server(int port);
     ~Server();
-
     bool init_sockets();
     void run();
-
     static void set_non_block_fd(int fd);
-
     bool handle_connection();
+
     void handle_socket_error(int fd);
-    void close_client(int fd);
+
+    void    handle_cgi_request(Client* c);
+    void    handle_cgi_event(int fd, uint32_t events);
+    void    finish_cgi_request(CGIRequestHandle* handler);
+    void    cleanup_cgi_handler(CGIRequestHandle* handler);
+
+    // void handle_cgi_read_error(Client &c, int pipe_fd);
 
     bool do_read(Client &c);
     bool do_write(Client &c);
 
-    HTTPResponse process_request(const HTTPRequest &req);
-    bool buildRespForCompletedReq(Client &c, int fd);
+    // check timeout
+    void close_client(int fd);
 
-    // timeouts
     void check_timeout();
     void check_cgi_timeout();
 
-    bool load_config(const std::string &path);
+    HTTPResponse process_request(const HTTPRequest &req);
 
     void cleanup();
+    // void process_request(Client &c);
+
+    bool buildRespForCompletedReq(Client &c, int fd);
+    bool load_config(const std::string &path);
+    void finalize_cgi_response(Client &c, int pipe_fd);
     static void signal_handler(int sig);
 
 private:
+    // class de tous les configuration de server
     int port_nbr;
     int socketfd;
-
     static volatile sig_atomic_t g_running;
-
     Epoller *_epoller;
     ClientManager *_manager;
-
+    CGIManager  _cgi_manager;
+    std::map<int, CGIRequestHandle*> _cgi_read_map;
+    std::map<int, CGIRequestHandle*>    _cgi_write_map;
+    std::map<CGIRequestHandle*, Client*>    _handler_to_client;
     Session_manager *_session_cookie;
 
-    // routing/config
     std::vector<ServerRuntimeConfig> _rt_servers;
     Routing *_routing;
     EffectiveConfig _default_cfg;
-
-    // CGI manager + fd dispatch tables
-    CGIManager _cgi_manager;
-
-    void start_cgi_for_client(Client* c, const HTTPRequest& req);
-    void handle_cgi_event(int fd, uint32_t ev);
-    void finish_cgi_process(CGI_Process* proc);
 };
+
+/*初始化 listen sockets (根据 ServerConfig)
+设置为 non-blocking
+将监听 fd 放入 PollManager
+创建与管理 Client 对象
+主循环：
+while (running):
+    poll()
+    if listening fd readable → accept
+    if client fd readable → recv
+    if client fd writable → send
+    if CGI pipe readable → read CGI output*/
 
 #endif

@@ -51,6 +51,7 @@ static bool splitHeaderBody(const std::string& out, std::string& head, std::stri
 
 HTTPResponse HTTPResponse::buildResponseFromCGIOutput(const std::string& out, bool keep_alive)
 {
+    (void)keep_alive; //这里不再决定 connection，由 Server 统一覆盖
     HTTPResponse resp;
     resp.statusCode = 200;
     resp.statusText = "OK";
@@ -69,6 +70,7 @@ HTTPResponse HTTPResponse::buildResponseFromCGIOutput(const std::string& out, bo
     // parse headers
     std::istringstream iss(head);
     std::string line;
+    bool firstLine = true;
     while (std::getline(iss, line))
     {
         if (!line.empty() && line[line.size() - 1] == '\r')
@@ -77,10 +79,39 @@ HTTPResponse HTTPResponse::buildResponseFromCGIOutput(const std::string& out, bo
         if (line.empty())
             continue;
 
+        //支持 CGI 输出直接给 HTTP 状态行
+        if (firstLine)
+        {
+            firstLine = false;
+            if (line.size() >= 5 && line.compare(0, 5, "HTTP/") == 0)
+            {
+                // 形如: HTTP/1.1 200 OK
+                std::istringstream sl(line);
+                std::string httpver;
+                int code = 0;
+                std::string text;
+                sl >> httpver >> code;
+                std::getline(sl, text);
+                ltrimSpaces(text);
+                if (!sl || code <= 0)
+                {
+                    // 状态行不合法：忽略，继续按 header 解析
+                }
+                else
+                {
+                    resp.statusCode = code;
+                    resp.statusText = text.empty() ? "OK" : text;
+                }
+                continue; // 状态行不当 header 处理
+            }
+        }
+        else
+        {
+             // 非第一行，正常继续
+        }
         std::size_t colon = line.find(':');
         if (colon == std::string::npos)
             continue;
-
         std::string key = line.substr(0, colon);
         std::string val = line.substr(colon + 1);
         rtrimSpaces(key);
@@ -121,6 +152,6 @@ HTTPResponse HTTPResponse::buildResponseFromCGIOutput(const std::string& out, bo
         resp.statusText = "Found";
     }
 
-    resp.headers["connection"] = keep_alive ? "keep-alive" : "close";
+    // resp.headers["connection"] = keep_alive ? "keep-alive" : "close";
     return (resp);
 }
