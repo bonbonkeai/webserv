@@ -90,27 +90,60 @@ const ServerRuntimeConfig &Routing::selectS(const HTTPRequest &req, int listen_p
 // -------------------
 // Retourne la location la plus spécifique (longest prefix match)
 // -------------------
-const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &server, const std::string &uri) const
+// const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &server, const std::string &uri) const
+// {
+//     const LocationRuntimeConfig *best = NULL;
+//     size_t bestLen = 0;
+
+//     for (size_t i = 0; i < server.locations.size(); i++)
+//     {
+//         const std::string &path = server.locations[i].path;
+
+//         // Vérifie si l'URI commence par le path
+//         if (uri.compare(0, path.size(), path) == 0)
+//         {
+//             // prefix 的匹配检查
+//             if (uri.size() == path.size() || uri[path.size()] == '/')
+//             {
+//                 if (path.size() > bestLen)
+//                 {
+//                     best = &server.locations[i];
+//                     bestLen = path.size();
+//                 }
+//             }
+//         }
+//     }
+//     return best;
+// }
+const LocationRuntimeConfig *Routing::matchLocation(const ServerRuntimeConfig &server,
+                                                    const std::string &uri) const
 {
     const LocationRuntimeConfig *best = NULL;
     size_t bestLen = 0;
-
-    for (size_t i = 0; i < server.locations.size(); i++)
+    for (size_t i = 0; i < server.locations.size(); ++i)
     {
         const std::string &path = server.locations[i].path;
-
-        // Vérifie si l'URI commence par le path
-        if (uri.compare(0, path.size(), path) == 0)
+        if (path.empty())
+            continue;
+        // 先要求 path 是 uri 的前缀
+        if (uri.compare(0, path.size(), path) != 0)
+            continue;
+        bool ok = false;
+        // 1) 完全相等
+        if (uri.size() == path.size())
+            ok = true;
+        // 2) location 以 '/' 结尾：直接算匹配（兼容 /cgi-bin/ 这种写法）
+        else if (!path.empty() && path[path.size() - 1] == '/')
+            ok = true;
+        // 3) 普通前缀匹配：要求边界是 '/'
+        else if (uri[path.size()] == '/')
+            ok = true;
+        if (!ok)
+            continue;
+        if (path.size() > bestLen)
         {
-            // prefix 的匹配检查
-            if (uri.size() == path.size() || uri[path.size()] == '/')
-            {
-                if (path.size() > bestLen)
-                {
-                    best = &server.locations[i];
-                    bestLen = path.size();
-                }
-            }
+            best = &server.locations[i];
+            bestLen = path.size();
         }
     }
     return best;
@@ -209,7 +242,12 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
     cfg.is_cgi = (loc && loc->has_cgi);
     cfg.cgi_exec = (loc && loc->has_cgi) ? loc->cgi_exec : std::map<std::string, std::string>();
     cfg.cgi_extensions = (loc && !loc->cgi_extensions.empty()) ? loc->cgi_extensions : std::set<std::string>();
-
+    //debug
+    std::cout << "[DBG] loc=" << (loc ? loc->path : "(null)")
+          << " has_cgi=" << (loc ? loc->has_cgi : 0)
+          << " extset=" << (loc ? loc->cgi_extensions.size() : 0)
+          << "\n";
+    //
     // upload_path
     cfg.upload_path.clear();
     if (loc && loc->has_upload_path)
@@ -261,49 +299,38 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
             uri_after_loc = req.path.substr(loc->path.size());
         else
             uri_after_loc = req.path;
-
         if (uri_after_loc.empty())
             uri_after_loc = "/";
         else if (uri_after_loc[0] != '/')
             uri_after_loc = "/" + uri_after_loc;
-
         size_t pos = 1;
         std::string current;
-
         while (true)
         {
             size_t slash = uri_after_loc.find('/', pos);
-
             std::string part;
             if (slash == std::string::npos)
                 part = uri_after_loc.substr(pos);
             else
                 part = uri_after_loc.substr(pos, slash - pos);
-
             current += "/" + part;
-
             std::string ext = get_extension(part);
-
             if (!ext.empty() && cfg.cgi_extensions.count(ext))
             {
                 rout.script_name = loc ? loc->path + current : current;
-
                 if (slash == std::string::npos)
                     rout.path_info = "";
                 else
                     rout.path_info = uri_after_loc.substr(slash);
-
                 // 重新计算 CGI 专用 fs_path
                 if (loc && loc->has_alias)
                 {
                     std::string base = loc->alias;
                     if (!base.empty() && base[base.size() - 1] != '/')
                         base += '/';
-
                     std::string script_suffix = current;
                     if (!script_suffix.empty() && script_suffix[0] == '/')
                         script_suffix.erase(0, 1);
-
                     rout.fs_path = base + script_suffix;
                 }
                 else
@@ -311,17 +338,14 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
                     std::string base = (loc && loc->has_root) ? loc->root : server.root;
                     if (!base.empty() && base[base.size() - 1] == '/')
                         base.erase(base.size() - 1);
-
                     rout.fs_path = base + rout.script_name;
                 }
-
                 rout.action = ACTION_CGI;
                 return cfg;
             }
 
             if (slash == std::string::npos)
                 break;
-
             pos = slash + 1;
         }
     }
