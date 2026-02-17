@@ -430,6 +430,10 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     if (_routing)
     {
         req.effective = _routing->resolve(req, port_nbr, req._rout);
+        //debug
+        std::cout << "[DBG] ACTION_CGI=" << ACTION_CGI
+          << " req.action=" << req._rout.action << std::endl;
+        //
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
