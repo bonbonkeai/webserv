@@ -775,33 +775,63 @@ void Server::cleanup_cgi_handler(CGIRequestHandle* handler)
     delete handler;
 }
 
-void    Server::check_cgi_timeout()
+// void    Server::check_cgi_timeout()
+// {
+//     unsigned long long now = Client::now_ms();
+//     std::vector<CGIRequestHandle*>  timed_out;
+
+//     for(std::map<CGIRequestHandle*, Client*>::iterator it = _handler_to_client.begin();
+//             it != _handler_to_client.end(); ++it)
+//     {
+//         CGIRequestHandle *handler = it->first;
+//         CGI_Process* proc = handler->get_process();
+
+//         if (proc->is_running())
+//         {
+//             unsigned long long diff = now - proc->start_time_ms;
+//             if (!proc->has_output && diff > START_TIMEOUT)
+//                 timed_out.push_back(handler);
+//             else if (proc->has_output && ((now - proc->last_output_ms) > EXECUTION_TIMEOUT))
+//                 timed_out.push_back(handler);
+//             else if (diff > EXECUTION_TIMEOUT *2)
+//                 timed_out.push_back(handler);
+//         }
+//         for(size_t i = 0; i < timed_out.size(); ++i)
+//         {
+//             CGIRequestHandle    *handler = timed_out[i];
+//             finish_cgi_request(handler);
+//         }
+//     }
+// }
+
+void Server::check_cgi_timeout()
 {
     unsigned long long now = Client::now_ms();
-    std::vector<CGIRequestHandle*>  timed_out;
+    std::vector<CGIRequestHandle*> timed_out;
 
-    for(std::map<CGIRequestHandle*, Client*>::iterator it = _handler_to_client.begin();
-            it != _handler_to_client.end(); ++it)
+    for (std::map<CGIRequestHandle*, Client*>::iterator it = _handler_to_client.begin();
+         it != _handler_to_client.end(); ++it)
     {
-        CGIRequestHandle *handler = it->first;
+        CGIRequestHandle* handler = it->first;
+        if (!handler) continue;
+
         CGI_Process* proc = handler->get_process();
+        if (!proc) { timed_out.push_back(handler); continue; }
 
         if (proc->is_running())
         {
             unsigned long long diff = now - proc->start_time_ms;
             if (!proc->has_output && diff > START_TIMEOUT)
                 timed_out.push_back(handler);
-            else if (proc->has_output && ((now - proc->last_output_ms) > EXECUTION_TIMEOUT))
+            else if (proc->has_output && (now - proc->last_output_ms) > EXECUTION_TIMEOUT)
                 timed_out.push_back(handler);
-            else if (diff > EXECUTION_TIMEOUT *2)
+            else if (diff > EXECUTION_TIMEOUT * 2)
                 timed_out.push_back(handler);
-        }
-        for(size_t i = 0; i < timed_out.size(); ++i)
-        {
-            CGIRequestHandle    *handler = timed_out[i];
-            finish_cgi_request(handler);
         }
     }
+
+    for (size_t i = 0; i < timed_out.size(); ++i)
+        finish_cgi_request(timed_out[i]);
 }
 
 void Server::run()
@@ -889,14 +919,18 @@ void Server::run()
                         break;                            // 一次只准备一个 response，保持顺序
                     }
                     // 没准备出新 response，就回去读
+                    // if (!c->is_cgi && (c->_state != WRITING || c->write_buffer.empty()))
+                    //     _epoller->modif_event(fd, EPOLLIN | EPOLLET);
+                    // else
+                    // {
+                    //     _manager->remove_socket_client(fd);
+                    //     _epoller->del_event(fd);
+                    //     close(fd);
+                    // }
                     if (!c->is_cgi && (c->_state != WRITING || c->write_buffer.empty()))
                         _epoller->modif_event(fd, EPOLLIN | EPOLLET);
                     else
-                    {
-                        _manager->remove_socket_client(fd);
-                        _epoller->del_event(fd);
-                        close(fd);
-                    }
+                        _epoller->modif_event(fd, EPOLLOUT | EPOLLET); // 还有要写就继续等可写
                 }
                 if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
                 {

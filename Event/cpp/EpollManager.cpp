@@ -1,8 +1,9 @@
 #include "Event/hpp/EpollManager.hpp"
 #include <cstring>
 
-Epoller::Epoller()
-{}
+// Epoller::Epoller()
+// {}
+Epoller::Epoller() : epfd(-1) {}
 
 Epoller::~Epoller()
 {
