@@ -66,6 +66,7 @@ public:
     void cleanup();
     static void signal_handler(int sig);
 
+
 private:
     int port_nbr;
     int socketfd;
@@ -88,6 +89,8 @@ private:
     void start_cgi_for_client(Client* c, const HTTPRequest& req);
     void handle_cgi_event(int fd, uint32_t ev);
     void finish_cgi_process(CGI_Process* proc);
+    void cleanup_client_cgi(Client* c);
+    // void finalize_cgi_response(Client& c, int pipe_fd);
 };
 
 #endif

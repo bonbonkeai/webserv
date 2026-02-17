@@ -544,7 +544,7 @@ void Server::finish_cgi_process(CGI_Process* proc)
         return;
     }
     HTTPResponse resp;
-   if (proc->_state == CGI_Process::TIMEOUT)
+    if (proc->_state == CGI_Process::TIMEOUT)
     {
         proc->terminate();
         resp = buildErrorResponse(504);
@@ -555,7 +555,7 @@ void Server::finish_cgi_process(CGI_Process* proc)
         resp = buildErrorResponse(500);
     }
     else
-        resp = HTTPResponse::buildResponseFromCGIOutput(proc->_output_buffer, true);
+        resp = resp.buildResponseFromCGIOutput(proc->_output_buffer, true);
     bool ka = computeKeepAlive(c->parser.getRequest(), resp.statusCode);
     c->is_keep_alive = ka;
     applyConnectionHeader(resp, ka);
@@ -693,13 +693,13 @@ void Server::run()
 // (Server.hpp still declares this; keep it linked.)
 // --------------------
 
-void Server::finalize_cgi_response(Client &c, int pipe_fd)
-{
-    (void)c;
-    (void)pipe_fd;
-    // Your codebase moved CGI handling to CGIRequestHandle.
-    // This function is intentionally left as a no-op.
-}
+// void Server::finalize_cgi_response(Client &c, int pipe_fd)
+// {
+//     (void)c;
+//     (void)pipe_fd;
+//     // Your codebase moved CGI handling to CGIRequestHandle.
+//     // This function is intentionally left as a no-op.
+// }
 
 bool Server::load_config(const std::string &path)
 {
