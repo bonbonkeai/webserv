@@ -1,5 +1,7 @@
 #include "Event/hpp/Server.hpp"
-
+#include <arpa/inet.h>   // inet_ntop
+#include <netinet/in.h>  // sockaddr_in
+#include <sys/socket.h>
 #include <cerrno>
 #include <csignal>
 #include <cstring>
@@ -161,6 +163,25 @@ void Server::set_non_block_fd(int fd)
         throw std::runtime_error("fcntl set flags failed");
 }
 
+// bool Server::handle_connection()
+// {
+//     while (true)
+//     {
+//         struct sockaddr_in clientaddr;
+//         socklen_t client_len = sizeof(clientaddr);
+//         int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
+//         if (connect_fd < 0)
+//         {
+//             if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                 return true;
+//             return false;
+//         }
+//         set_non_block_fd(connect_fd);
+//         _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
+//         _manager->add_socket_client(connect_fd);
+//     }
+//     return true;
+// }
 bool Server::handle_connection()
 {
     while (true)
@@ -177,6 +198,13 @@ bool Server::handle_connection()
         set_non_block_fd(connect_fd);
         _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
         _manager->add_socket_client(connect_fd);
+        Client *c = _manager->get_socket_client_by_fd(connect_fd);
+        if (c)
+        {
+            char ip[INET_ADDRSTRLEN];
+            const char *p = inet_ntop(AF_INET, &clientaddr.sin_addr, ip, sizeof(ip));
+            c->remote_addr = (p ? std::string(ip) : std::string("")); // fallback empty if fail
+        }
     }
     return true;
 }
@@ -483,9 +511,17 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
         return;
     }
     // pipe 错误优先
-    if (ev & (EPOLLERR | EPOLLRDHUP | EPOLLHUP))
+    // if (ev & (EPOLLERR | EPOLLRDHUP | EPOLLHUP))
+    // {
+    //     // 先从 epoll 摘掉
+    //     _epoller->del_event(fd);
+    //     proc->_state = CGI_Process::ERROR;
+    //     finish_cgi_process(proc);
+    //     return;
+    // }
+    // pipe: only EPOLLERR is a hard error
+    if (ev & EPOLLERR)
     {
-        // 先从 epoll 摘掉
         _epoller->del_event(fd);
         proc->_state = CGI_Process::ERROR;
         finish_cgi_process(proc);
@@ -509,18 +545,34 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
             _epoller->del_event(fd); // 写端完成就不监听了
     }
     // 读 stdout
-    if ((ev & EPOLLIN) && proc->_read_fd == fd)
+    // if ((ev & EPOLLIN) && proc->_read_fd == fd)
+    // {
+    //     for (;;)
+    //     {
+    //         std::size_t before = proc->_output_buffer.size();
+    //         std::string tmp;
+    //         bool ok = proc->read_output(tmp);
+    //         if (!ok)
+    //             break;
+    //         if (proc->_output_buffer.size() == before)
+    //             break;
+    //     }
+    //     if (proc->_read_fd < 0)
+    //         _epoller->del_event(fd);
+    // }
+    if (proc->_read_fd == fd)
     {
         for (;;)
         {
-            std::size_t before = proc->_output_buffer.size();
             std::string tmp;
             bool ok = proc->read_output(tmp);
-            if (!ok)
-                break;
-            if (proc->_output_buffer.size() == before)
-                break;
+            // ok==false 可能是 EOF(读到0) 或 fatal error
+            // EOF 时 read_output 会把 _state=FINISHED 并 close(_read_fd)
+            if (!ok) break;
+            // EAGAIN: 你的 read_output 目前会 return true 但 tmp 为空
+            if (tmp.empty()) break;
         }
+
         if (proc->_read_fd < 0)
             _epoller->del_event(fd);
     }
@@ -664,12 +716,10 @@ void Server::run()
                     {
                         const HTTPRequest &rq = c->parser.getRequest();
                         int code = rq.error_code > 0 ? rq.error_code : 400;
-
                         HTTPResponse err = buildErrorResponse(code);
                         bool ka2 = computeKeepAlive(rq, code);
                         c->is_keep_alive = ka2;
                         applyConnectionHeader(err, ka2);
-
                         c->write_buffer = ResponseBuilder::build(err);
                         c->write_pos = 0;
                         c->_state = WRITING;
@@ -682,7 +732,6 @@ void Server::run()
                     buildRespForCompletedReq(*c, fd);
                     break;
                 }
-
                 if (!c->is_cgi && (c->_state != WRITING || c->write_buffer.empty()))
                     _epoller->modif_event(fd, EPOLLIN | EPOLLET);
                 else

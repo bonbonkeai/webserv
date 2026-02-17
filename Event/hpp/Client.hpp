@@ -58,7 +58,9 @@ struct Client
     CGI_Process *_cgi;
     bool is_cgi;
     // CGIRequestHandle* cgi_handler;
+    std::string remote_addr;
 
+    
     // timeout
     time_t last_active;
     unsigned long long last_activity_ms;

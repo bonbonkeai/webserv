@@ -247,6 +247,11 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
           << " has_cgi=" << (loc ? loc->has_cgi : 0)
           << " extset=" << (loc ? loc->cgi_extensions.size() : 0)
           << "\n";
+    std::cerr << "[DBG] cgi_exts:";
+    for (std::set<std::string>::const_iterator it = cfg.cgi_extensions.begin();
+        it != cfg.cgi_extensions.end(); ++it)
+        std::cerr << " [" << *it << "]";
+    std::cerr << "\n";
     //
     // upload_path
     cfg.upload_path.clear();
@@ -315,9 +320,17 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
                 part = uri_after_loc.substr(pos, slash - pos);
             current += "/" + part;
             std::string ext = get_extension(part);
+            //不管 config 写 .sh 还是 sh 都能跑通
+            std::string ext_no_dot = ext;
+            if (!ext_no_dot.empty() && ext_no_dot[0] == '.')
+                ext_no_dot.erase(0, 1);
             if (!ext.empty() && cfg.cgi_extensions.count(ext))
             {
-                rout.script_name = loc ? loc->path + current : current;
+                // rout.script_name = loc ? loc->path + current : current;
+                std::string base = (loc ? loc->path : "");
+                if (!base.empty() && base[base.size() - 1] == '/')
+                    base.erase(base.size() - 1);
+                rout.script_name = base + current;
                 if (slash == std::string::npos)
                     rout.path_info = "";
                 else

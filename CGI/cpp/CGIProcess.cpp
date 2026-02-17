@@ -62,6 +62,9 @@ bool CGI_Process::execute(const EffectiveConfig &config, const HTTPRequest &req,
     std::string script_path = req._rout.fs_path;
     if (access(script_path.c_str(), X_OK) != 0)
     {
+        //debug
+        perror("cgi access X_OK failed");
+        //
         _state = CGI_Process::ERROR;
         return false;
     }
@@ -79,14 +82,44 @@ bool CGI_Process::execute(const EffectiveConfig &config, const HTTPRequest &req,
     return setup_parent_process(pipe_in, pipe_out, req);
 }
 
-bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2], const EffectiveConfig &config,
+// bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2], const EffectiveConfig &config,
+//                                       const HTTPRequest &req)
+// {
+//     close(pipe_in[1]);
+//     close(pipe_out[0]);
+
+//     if (dup2(pipe_in[0], STDIN_FILENO) < 0 || dup2(pipe_out[1], STDOUT_FILENO) < 0 ||
+//         dup2(pipe_out[1], STDERR_FILENO) < 0)
+//         _exit(1);
+//     close(pipe_in[0]);
+//     close(pipe_out[1]);
+
+//     char *abs_path = realpath(req._rout.fs_path.c_str(), NULL);
+//     if (!abs_path)
+//     {
+//         perror("realpath failed");
+//         _exit(1);
+//     }
+
+//     CGI_ENV env = CGI_ENV::get_env_from_request(req, config);
+//     env.final_env();
+
+//     char *argv[] = {abs_path, NULL};
+//     execve(abs_path, argv, env.envp.data());
+
+//     perror("execve failed");
+//     free(abs_path);
+//     _exit(1);
+//     return false;
+// }
+bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2],
+                                      const EffectiveConfig &config,
                                       const HTTPRequest &req)
 {
     close(pipe_in[1]);
     close(pipe_out[0]);
 
-    if (dup2(pipe_in[0], STDIN_FILENO) < 0 || dup2(pipe_out[1], STDOUT_FILENO) < 0 ||
-        dup2(pipe_out[1], STDERR_FILENO) < 0)
+    if (dup2(pipe_in[0], STDIN_FILENO) < 0 || dup2(pipe_out[1], STDOUT_FILENO) < 0 || dup2(pipe_out[1], STDERR_FILENO) < 0)
         _exit(1);
     close(pipe_in[0]);
     close(pipe_out[1]);
@@ -100,15 +133,38 @@ bool CGI_Process::setup_child_process(int pipe_in[2], int pipe_out[2], const Eff
 
     CGI_ENV env = CGI_ENV::get_env_from_request(req, config);
     env.final_env();
+    char **envp = env.envp.empty() ? NULL : &env.envp[0];
 
-    char *argv[] = {abs_path, NULL};
-    execve(abs_path, argv, env.envp.data());
+    // 1) 取扩展名
+    std::string ext;
+    std::size_t dot = req._rout.fs_path.rfind('.');
+    if (dot != std::string::npos)
+        ext = req._rout.fs_path.substr(dot);
 
-    perror("execve failed");
+    // 2) 若配置了 CGI 解释器，用解释器跑脚本
+    std::map<std::string, std::string>::const_iterator it = config.cgi_exec.find(ext);
+    if (it != config.cgi_exec.end() && !it->second.empty())
+    {
+        const std::string &interp = it->second;
+        char *argv2[3];
+        argv2[0] = const_cast<char*>(interp.c_str());
+        argv2[1] = abs_path;
+        argv2[2] = NULL;
+        execve(argv2[0], argv2, envp);
+        perror("execve interpreter failed");
+        free(abs_path);
+        _exit(1);
+    }
+
+    // 3) fallback：直接执行脚本（依赖 shebang + 无 CRLF）
+    char *argv1[] = { abs_path, NULL };
+    execve(abs_path, argv1, envp);
+
+    perror("execve script failed");
     free(abs_path);
     _exit(1);
-    return false;
 }
+
 
 bool CGI_Process::setup_parent_process(int pipe_in[2], int pipe_out[2], const HTTPRequest &req)
 {

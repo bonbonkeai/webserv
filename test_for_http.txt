@@ -1555,3 +1555,18 @@ curl -isS --http1.1 -I "$BASE/hello.txt" -H "Host: localhost" | sed -n '1,30p'
 ***************
 
 ***************
+
+
+//test for env
+curl -v http://127.0.0.1:8080/cgi-bin/test_env.sh
+
+//test for body
+curl -v -X POST "http://127.0.0.1:8080/cgi-bin/echo_body.sh" \
+  --data "hello=world"
+
+//test for URI
+curl -v "http://127.0.0.1:8080/cgi-bin/test_env.sh?x=1&y=2"
+curl -v "http://127.0.0.1:8080/cgi-bin/test_env.sh?x=1%202&y=%E4%B8%AD"
+curl -v "http://127.0.0.1:8080/cgi-bin/test_env.sh?="
+curl -v --path-as-is "http://127.0.0.1:8080/cgi-bin/test_env.sh/aaa/bbb?x=1"
+curl -v --path-as-is "http://127.0.0.1:8080/cgi-bin/nope.sh/aaa?x=1"
