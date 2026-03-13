@@ -56,6 +56,17 @@ HTTPResponse HTTPResponse::buildResponseFromCGIOutput(const std::string& out, bo
     resp.statusCode = 200;
     resp.statusText = "OK";
 
+    // 空输出 = CGI 崩溃或没有任何输出
+    if (out.empty())
+    {
+        resp.statusCode = 500;
+        resp.statusText = "Internal Server Error";
+        resp.body = "CGI produced no output";
+        resp.headers["content-length"] = toString(resp.body.size());
+        resp.headers["content-type"] = "text/plain";
+        return resp;
+    }
+    
     std::string head, body;
     if (!splitHeaderBody(out, head, body))
     {

@@ -33,15 +33,16 @@ struct EffectiveConfig
     // cgi
     bool is_cgi;
     std::map<std::string, std::string> cgi_exec;
-    std::set<std::string>   cgi_extensions;
     std::string upload_path;
     bool    has_upload_path;
+    bool    forbidden;
 
     // routing
     std::string location_path;
 
     EffectiveConfig() : autoindex(false), max_body_size(0),
-                        has_return(false), return_code(302), is_cgi(false), upload_path(""), has_upload_path(false) {}
+                        has_return(false), return_code(302), is_cgi(false), upload_path(""), has_upload_path(false),
+                        forbidden(false) {}
 };
 
 ServerRuntimeConfig buildServer(const ServerConfig &raw);

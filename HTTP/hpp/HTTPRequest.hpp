@@ -36,6 +36,7 @@ struct RouteResult
         //cgi
         std::string script_name;
         std::string path_info;
+        RouteResult() : action(ACTION_STATIC), redirect_code(0){}
 };
 
 class HTTPRequest

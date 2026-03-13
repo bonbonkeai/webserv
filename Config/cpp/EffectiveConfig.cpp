@@ -178,7 +178,6 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const Locati
             if (!ext.empty())
             {
                 loc.cgi_exec[ext] = exec;
-                loc.cgi_extensions.insert(ext);
             }
         }
     }
@@ -193,7 +192,6 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const Locati
     if (loc.has_cgi && loc.cgi_exec.find(".cgi") == loc.cgi_exec.end())
     {
         loc.cgi_exec[".cgi"] = "/usr/bin/env";
-        loc.cgi_extensions.insert(".cgi");
     }
 
     // --- error_page ---

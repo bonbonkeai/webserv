@@ -241,18 +241,7 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
     // cgi
     cfg.is_cgi = (loc && loc->has_cgi);
     cfg.cgi_exec = (loc && loc->has_cgi) ? loc->cgi_exec : std::map<std::string, std::string>();
-    cfg.cgi_extensions = (loc && !loc->cgi_extensions.empty()) ? loc->cgi_extensions : std::set<std::string>();
-    //debug
-    std::cout << "[DBG] loc=" << (loc ? loc->path : "(null)")
-          << " has_cgi=" << (loc ? loc->has_cgi : 0)
-          << " extset=" << (loc ? loc->cgi_extensions.size() : 0)
-          << "\n";
-    std::cerr << "[DBG] cgi_exts:";
-    for (std::set<std::string>::const_iterator it = cfg.cgi_extensions.begin();
-        it != cfg.cgi_extensions.end(); ++it)
-        std::cerr << " [" << *it << "]";
-    std::cerr << "\n";
-    //
+
     // upload_path
     cfg.upload_path.clear();
     if (loc && loc->has_upload_path)
@@ -320,11 +309,14 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
                 part = uri_after_loc.substr(pos, slash - pos);
             current += "/" + part;
             std::string ext = get_extension(part);
-            //不管 config 写 .sh 还是 sh 都能跑通
+            // 不管 config 写 .sh 还是 sh 都能跑通
             std::string ext_no_dot = ext;
             if (!ext_no_dot.empty() && ext_no_dot[0] == '.')
                 ext_no_dot.erase(0, 1);
-            if (!ext.empty() && cfg.cgi_extensions.count(ext))
+            bool matched = !ext.empty() && (cfg.cgi_exec.count(ext) > 0 ||
+                                            cfg.cgi_exec.count(ext_no_dot) > 0);
+
+            if (matched)
             {
                 // rout.script_name = loc ? loc->path + current : current;
                 std::string base = (loc ? loc->path : "");
@@ -361,6 +353,13 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
                 break;
             pos = slash + 1;
         }
+    }
+
+    if (cfg.is_cgi)
+    {
+        cfg.is_cgi = false;
+        cfg.forbidden = true;
+        return cfg;
     }
 
     if (cfg.autoindex)

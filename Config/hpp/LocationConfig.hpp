@@ -47,7 +47,6 @@ struct LocationRuntimeConfig
 
     bool has_cgi;
     std::map<std::string, std::string> cgi_exec;
-    std::set<std::string> cgi_extensions;
     //upload path
     std::string upload_path;
     bool    has_upload_path;

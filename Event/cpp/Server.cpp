@@ -1,6 +1,6 @@
 #include "Event/hpp/Server.hpp"
-#include <arpa/inet.h>   // inet_ntop
-#include <netinet/in.h>  // sockaddr_in
+#include <arpa/inet.h>  // inet_ntop
+#include <netinet/in.h> // sockaddr_in
 #include <sys/socket.h>
 #include <cerrno>
 #include <csignal>
@@ -207,11 +207,11 @@ bool Server::handle_connection()
 // --------------------
 // Close helpers (important for avoiding segfault)
 // --------------------
-void Server::cleanup_client_cgi(Client* c)
+void Server::cleanup_client_cgi(Client *c)
 {
     if (!c)
         return;
-    CGI_Process* proc = c->_cgi;
+    CGI_Process *proc = c->_cgi;
     c->_cgi = NULL;
     c->is_cgi = false;
     if (!proc)
@@ -323,7 +323,7 @@ bool Server::do_write(Client &c)
             return (false);
 
         c.is_keep_alive = false;
-        return(true);
+        return (true);
     }
     return (true);
 }
@@ -373,12 +373,13 @@ void Server::check_timeout()
 void Server::check_cgi_timeout()
 {
     unsigned long long now = Client::now_ms();
-    std::vector<CGI_Process*> timed_out;
-    std::vector<CGI_Process*>& procs = _cgi_manager.all_processes();
+    std::vector<CGI_Process *> timed_out;
+    std::vector<CGI_Process *> &procs = _cgi_manager.all_processes();
     for (size_t i = 0; i < procs.size(); ++i)
     {
-        CGI_Process* proc = procs[i];
-        if (!proc || !proc->is_running()) continue;
+        CGI_Process *proc = procs[i];
+        if (!proc || !proc->is_running())
+            continue;
         unsigned long long diff = now - proc->start_time_ms;
         bool timeout = false;
         if (!proc->has_output && diff > START_TIMEOUT)
@@ -395,7 +396,7 @@ void Server::check_cgi_timeout()
     }
     for (size_t i = 0; i < timed_out.size(); ++i)
     {
-        CGI_Process* proc = timed_out[i];
+        CGI_Process *proc = timed_out[i];
         proc->_state = CGI_Process::TIMEOUT;
         finish_cgi_process(proc);
     }
@@ -404,13 +405,14 @@ void Server::check_cgi_timeout()
 // Build response
 // --------------------
 
-void Server::start_cgi_for_client(Client* c, const HTTPRequest& req)
+void Server::start_cgi_for_client(Client *c, const HTTPRequest &req)
 {
-    CGI_Process* proc = new CGI_Process();
+    CGI_Process *proc = new CGI_Process();
     if (!proc->execute(req.effective, req, c))
     {
+        int code = proc->_error_code;
         delete proc;
-        HTTPResponse err = buildErrorResponse(500);
+        HTTPResponse err = buildErrorResponse(code);
         err.headers["connection"] = "close";
         c->is_keep_alive = false;
         c->write_buffer = ResponseBuilder::build(err);
@@ -419,16 +421,19 @@ void Server::start_cgi_for_client(Client* c, const HTTPRequest& req)
         _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
         return;
     }
-    _cgi_manager.add_process(proc);
-    if (proc->_read_fd >= 0)
-        _epoller->add_event(proc->_read_fd, EPOLLIN | EPOLLET);
-    if (proc->_write_fd >= 0 && req.method == "POST" && req.has_body)
-        _epoller->add_event(proc->_write_fd, EPOLLOUT | EPOLLET);
+
     if (!(req.method == "POST" && req.has_body) && proc->_write_fd >= 0)
     {
         close(proc->_write_fd);
         proc->_write_fd = -1;
     }
+    
+    _cgi_manager.add_process(proc);
+    if (proc->_read_fd >= 0)
+        _epoller->add_event(proc->_read_fd, EPOLLIN | EPOLLET);
+    if (proc->_write_fd >= 0 && req.method == "POST" && req.has_body)
+        _epoller->add_event(proc->_write_fd, EPOLLOUT | EPOLLET);
+    
     c->_cgi = proc;
     c->is_cgi = true;
     c->_state = CGI_RUNNING;
@@ -441,10 +446,6 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     if (_routing)
     {
         req.effective = _routing->resolve(req, port_nbr, req._rout);
-        //debug
-        std::cout << "[DBG] ACTION_CGI=" << ACTION_CGI
-          << " req.action=" << req._rout.action << std::endl;
-        //
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
@@ -466,11 +467,37 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
         return (true);
     }
+    // 413 body size
+    if (req.has_body && req.body.size() > req.effective.max_body_size)
+    {
+        HTTPResponse err = buildErrorResponse(413);
+        bool ka = computeKeepAlive(req, 413);
+        c.is_keep_alive = ka;
+        applyConnectionHeader(err, ka);
+        c.write_buffer = ResponseBuilder::build(err);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return true;
+    }
+
     // CGI
     if (req._rout.action == ACTION_CGI)
     {
         start_cgi_for_client(&c, req);
-        return (true);
+        return true;
+    }
+    if (req.effective.forbidden)
+    {
+        HTTPResponse err = buildErrorResponse(403);
+        bool ka = computeKeepAlive(req, 403);
+        c.is_keep_alive = ka;
+        applyConnectionHeader(err, ka);
+        c.write_buffer = ResponseBuilder::build(err);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return true;
     }
     // normal
     HTTPResponse resp = process_request(req);
@@ -486,7 +513,7 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
 
 void Server::handle_cgi_event(int fd, uint32_t ev)
 {
-    CGI_Process* proc = _cgi_manager.get_process_by_fd(fd);
+    CGI_Process *proc = _cgi_manager.get_process_by_fd(fd);
     if (!proc)
     {
         _epoller->del_event(fd);
@@ -509,19 +536,21 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
         finish_cgi_process(proc);
         return;
     }
-    Client* c = proc->client;
+    Client *c = proc->client;
     if (!c)
     {
         // 没 client 了，直接回收
-        if (proc->_read_fd >= 0) _epoller->del_event(proc->_read_fd);
-        if (proc->_write_fd >= 0) _epoller->del_event(proc->_write_fd);
+        if (proc->_read_fd >= 0)
+            _epoller->del_event(proc->_read_fd);
+        if (proc->_write_fd >= 0)
+            _epoller->del_event(proc->_write_fd);
         _cgi_manager.kill_and_remove(proc);
         return;
     }
     // 写 stdin（POST body）
     if ((ev & EPOLLOUT) && proc->_write_fd == fd)
     {
-        const HTTPRequest& req = c->parser.getRequest();
+        const HTTPRequest &req = c->parser.getRequest();
         bool done = proc->write_body(req.body);
         if (done)
             _epoller->del_event(fd); // 写端完成就不监听了
@@ -565,10 +594,10 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
     }
 }
 
-void Server::finish_cgi_process(CGI_Process* proc)
+void Server::finish_cgi_process(CGI_Process *proc)
 {
-    Client* c = proc->client;
-    if (proc->_read_fd >= 0) 
+    Client *c = proc->client;
+    if (proc->_read_fd >= 0)
         _epoller->del_event(proc->_read_fd);
     if (proc->_write_fd >= 0)
         _epoller->del_event(proc->_write_fd);
@@ -626,7 +655,7 @@ void Server::run()
                 continue;
             }
             // 2) CGI fds
-           if (_cgi_manager.is_cgi_fd(fd))
+            if (_cgi_manager.is_cgi_fd(fd))
             {
                 handle_cgi_event(fd, ev);
                 continue;

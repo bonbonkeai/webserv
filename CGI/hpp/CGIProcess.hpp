@@ -50,6 +50,7 @@ public:
     pid_t _pid;
     int _read_fd;
     int _write_fd;
+    int _error_code;
     // output
     std::string _output_buffer;
     bool has_output;

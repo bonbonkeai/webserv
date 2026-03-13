@@ -114,7 +114,7 @@ void ConfigParser::parse_directives(std::map<std::string, std::vector<std::strin
     }
 
     expect(TYPE_SEMICOLON, "Expected ';' after directive " + key);
-    directives[key] = values;
+    directives[key].insert(directives[key].end(), values.begin(), values.end());
 }
 
 std::vector<ServerConfig> ConfigParser::parse()

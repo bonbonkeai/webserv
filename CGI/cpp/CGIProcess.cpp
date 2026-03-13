@@ -8,7 +8,7 @@
 #define TRACE() std::cout << "[] " << __FILE__ << ":" << __LINE__ << std::endl;
 
 CGI_Process::CGI_Process() : _state(CREATE), _pid(-1), _read_fd(-1),
-                             _write_fd(-1), has_output(false), write_pos(0),
+                             _write_fd(-1), _error_code(500), has_output(false), write_pos(0),
                              start_time_ms(0), last_output_ms(0), client(NULL)
 {
 }
@@ -60,12 +60,24 @@ bool CGI_Process::execute(const EffectiveConfig &config, const HTTPRequest &req,
     int pipe_out[2];
 
     std::string script_path = req._rout.fs_path;
-    if (access(script_path.c_str(), X_OK) != 0)
+    if (access(script_path.c_str(), F_OK) != 0)
     {
+        // 文件不存在
         //debug
         perror("cgi access X_OK failed");
         //
         _state = CGI_Process::ERROR;
+        _error_code = 404;
+        return false;
+    }
+    if (access(script_path.c_str(), X_OK) != 0)
+    {
+        // 文件存在但不可执行
+        //debug
+        perror("cgi access X_OK failed");
+        //
+        _state = CGI_Process::ERROR;
+        _error_code = 403;
         return false;
     }
     if (!create_pipe(pipe_in, pipe_out))

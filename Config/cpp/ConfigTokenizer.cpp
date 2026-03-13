@@ -104,7 +104,7 @@ bool    ConfigTokenizer::is_number(char c)
 std::string ConfigTokenizer::read_word(const std::string& str, size_t& pos)
 {
     std::string resultat;
-    while (pos < str.length() && is_word(str[pos]))
+    while (pos < str.length() && (is_word(str[pos]) || std::isdigit(str[pos])))
     {
         resultat += str[pos];
         pos++;
