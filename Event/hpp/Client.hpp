@@ -25,7 +25,7 @@ HTTPRequestParser 实例
 keepAlive 状态
 lastActive 时间戳
 与 CGI 交互时的 cgiFd*/
-//class CGI_Process;
+// class CGI_Process;
 
 enum Clientstate
 {
@@ -45,6 +45,7 @@ enum Clientstate
 struct Client
 {
     int client_fd;
+    int port;
 
     Clientstate _state;
     std::string read_buffer; // 仅用于暂存recv;parser会自带_buffer
@@ -60,7 +61,6 @@ struct Client
     // CGIRequestHandle* cgi_handler;
     std::string remote_addr;
 
-    
     // timeout
     time_t last_active;
     unsigned long long last_activity_ms;
@@ -71,6 +71,7 @@ struct Client
 
     Client(int fd = -1)
         : client_fd(fd),
+          port(0),
           _state(READING),
           read_buffer(),
           parser(),
@@ -84,7 +85,7 @@ struct Client
         read_buffer.reserve(4096);
         last_activity_ms = now_ms();
     }
-    void    reset();
+    void reset();
 
     int get_fd()
     {
@@ -115,10 +116,11 @@ public:
     {
         return _clients;
     }
-    
-    void    clear_all_clients();
+
+    void clear_all_clients();
+
 private:
-    std::map<int, Client *> _clients;     // socket_fd -> client*
+    std::map<int, Client *> _clients; // socket_fd -> client*
 };
 
 #endif

@@ -101,13 +101,25 @@ void Server::cleanup()
         }
         _manager->clear_all_clients();
     }
+    // if (socketfd >= 0)
+    //{
+    //     if (_epoller)
+    //         _epoller->del_event(socketfd);
+    //     close(socketfd);
+    //     socketfd = -1;
+    // }
     if (socketfd >= 0)
     {
-        if (_epoller)
-            _epoller->del_event(socketfd);
-        close(socketfd);
+        for (size_t i = 0; i < _listen_fds.size(); ++i)
+        {
+            _epoller->del_event(_listen_fds[i]);
+            close(_listen_fds[i]);
+        }
+        _listen_fds.clear();
+        _fd_to_port.clear();
         socketfd = -1;
     }
+
     if (_epoller)
     {
         delete _epoller;
@@ -130,22 +142,54 @@ void Server::cleanup()
     }
 }
 
+// bool Server::init_sockets()
+//{
+//     socketfd = socket(AF_INET, SOCK_STREAM, 0);
+//     if (socketfd < 0)
+//         throw std::runtime_error("Socket create failed");
+//     int yes = 1;
+//     setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+//     struct sockaddr_in serveraddr;
+//     std::memset(&serveraddr, 0, sizeof(serveraddr));
+//     serveraddr.sin_family = AF_INET;
+//     serveraddr.sin_port = htons(port_nbr);
+//     serveraddr.sin_addr.s_addr = INADDR_ANY;
+//     if (bind(socketfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
+//         throw std::runtime_error("Socket bind failed");
+//     if (listen(socketfd, 256) < 0)
+//         throw std::runtime_error("Listen socket failed");
+//     return (_epoller->init(128));
+// }
+
 bool Server::init_sockets()
 {
-    socketfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socketfd < 0)
-        throw std::runtime_error("Socket create failed");
-    int yes = 1;
-    setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-    struct sockaddr_in serveraddr;
-    std::memset(&serveraddr, 0, sizeof(serveraddr));
-    serveraddr.sin_family = AF_INET;
-    serveraddr.sin_port = htons(port_nbr);
-    serveraddr.sin_addr.s_addr = INADDR_ANY;
-    if (bind(socketfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
-        throw std::runtime_error("Socket bind failed");
-    if (listen(socketfd, 256) < 0)
-        throw std::runtime_error("Listen socket failed");
+    std::set<int> ports;
+    for (size_t i = 0; i < _rt_servers.size(); i++)
+        ports.insert(_rt_servers[i].port);
+    for (std::set<int>::iterator it = ports.begin(); it != ports.end(); ++it)
+    {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0)
+            throw std::runtime_error("Socket create failed");
+        int yes = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        struct sockaddr_in serveraddr;
+        std::memset(&serveraddr, 0, sizeof(serveraddr));
+        serveraddr.sin_family = AF_INET;
+        serveraddr.sin_port = htons(*it);
+        serveraddr.sin_addr.s_addr = INADDR_ANY;
+        if (bind(fd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
+            throw std::runtime_error("Socket bind failed");
+        if (listen(fd, 256) < 0)
+            throw std::runtime_error("Listen socket failed");
+        _listen_fds.push_back(fd);
+        _fd_to_port[fd] = *it;
+    }
+    if (!_listen_fds.empty())
+    {
+        socketfd = _listen_fds[0];
+        port_nbr = _fd_to_port[socketfd];
+    }
     return (_epoller->init(128));
 }
 
@@ -177,13 +221,41 @@ void Server::set_non_block_fd(int fd)
 //     }
 //     return true;
 // }
-bool Server::handle_connection()
+// bool Server::handle_connection()
+//{
+//    while (true)
+//    {
+//        struct sockaddr_in clientaddr;
+//        socklen_t client_len = sizeof(clientaddr);
+//        int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
+//        if (connect_fd < 0)
+//        {
+//            if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                return (true);
+//            return (false);
+//        }
+//        set_non_block_fd(connect_fd);
+//        _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
+//        _manager->add_socket_client(connect_fd);
+//        Client *c = _manager->get_socket_client_by_fd(connect_fd);
+//        if (c)
+//        {
+//            char ip[INET_ADDRSTRLEN];
+//            const char *p = inet_ntop(AF_INET, &clientaddr.sin_addr, ip, sizeof(ip));
+//            c->remote_addr = (p ? std::string(ip) : std::string("")); // fallback empty if fail
+//        }
+//    }
+//    return (true);
+//}
+
+// multi server
+bool Server::handle_connection_on(int listen_fd, int port)
 {
     while (true)
     {
         struct sockaddr_in clientaddr;
         socklen_t client_len = sizeof(clientaddr);
-        int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
+        int connect_fd = accept(listen_fd, (struct sockaddr *)&clientaddr, &client_len);
         if (connect_fd < 0)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -199,6 +271,7 @@ bool Server::handle_connection()
             char ip[INET_ADDRSTRLEN];
             const char *p = inet_ntop(AF_INET, &clientaddr.sin_addr, ip, sizeof(ip));
             c->remote_addr = (p ? std::string(ip) : std::string("")); // fallback empty if fail
+            c->port = port;
         }
     }
     return (true);
@@ -445,7 +518,7 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     // resolve effective config
     if (_routing)
     {
-        req.effective = _routing->resolve(req, port_nbr, req._rout);
+        req.effective = _routing->resolve(req, c.port, req._rout);
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
@@ -643,8 +716,15 @@ void Server::finish_cgi_process(CGI_Process *proc)
 
 void Server::run()
 {
-    set_non_block_fd(socketfd);
-    _epoller->add_event(socketfd, EPOLLIN | EPOLLET);
+    // set_non_block_fd(socketfd);
+    //_epoller->add_event(socketfd, EPOLLIN | EPOLLET);
+    // multi server
+    for (size_t i = 0; i < _listen_fds.size(); ++i)
+    {
+        set_non_block_fd(_listen_fds[i]);
+        _epoller->add_event(_listen_fds[i], EPOLLIN | EPOLLET);
+    }
+
     while (g_running)
     {
         int nfds = _epoller->wait(Timeout);
@@ -655,9 +735,15 @@ void Server::run()
             int fd = _epoller->get_event_fd(i);
             uint32_t ev = _epoller->get_event_type(i);
             // 1) listen
-            if (fd == socketfd)
+            // if (fd == socketfd)
+            //{
+            //    handle_connection();
+            //    continue;
+            //}
+            // multi server
+            if (_fd_to_port.count(fd))
             {
-                handle_connection();
+                handle_connection_on(fd, _fd_to_port[fd]);
                 continue;
             }
             // 2) CGI fds

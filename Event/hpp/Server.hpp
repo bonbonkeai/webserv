@@ -47,7 +47,8 @@ public:
 
     static void set_non_block_fd(int fd);
 
-    bool handle_connection();
+    // bool handle_connection();
+    bool handle_connection_on(int listen_fd, int port);
     void handle_socket_error(int fd);
     void close_client(int fd);
 
@@ -66,10 +67,13 @@ public:
     void cleanup();
     static void signal_handler(int sig);
 
-
 private:
     int port_nbr;
     int socketfd;
+
+    // multi_server
+    std::vector<int> _listen_fds;
+    std::map<int, int> _fd_to_port;
 
     static volatile sig_atomic_t g_running;
 
@@ -86,10 +90,10 @@ private:
     // CGI manager + fd dispatch tables
     CGIManager _cgi_manager;
 
-    void start_cgi_for_client(Client* c, const HTTPRequest& req);
+    void start_cgi_for_client(Client *c, const HTTPRequest &req);
     void handle_cgi_event(int fd, uint32_t ev);
-    void finish_cgi_process(CGI_Process* proc);
-    void cleanup_client_cgi(Client* c);
+    void finish_cgi_process(CGI_Process *proc);
+    void cleanup_client_cgi(Client *c);
     // void finalize_cgi_response(Client& c, int pipe_fd);
 };
 
