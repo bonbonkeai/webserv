@@ -51,12 +51,11 @@ void completeCGI_executors(std::map<std::string, std::string> &cgi_exec)
     static std::map<std::string, std::string> DEFAULT_INTER;
     if (DEFAULT_INTER.empty())
     {
-        DEFAULT_INTER.insert(std::make_pair(".php", "php-cgi"));
-        DEFAULT_INTER.insert(std::make_pair(".py", "python3"));
-        DEFAULT_INTER.insert(std::make_pair(".sh", "bash"));
+        DEFAULT_INTER.insert(std::make_pair(".php", "/usr/bin/php-cgi"));
+        DEFAULT_INTER.insert(std::make_pair(".py", "/usr/bin/python3"));
+        DEFAULT_INTER.insert(std::make_pair(".sh", "/bin/bash"));
         DEFAULT_INTER.insert(std::make_pair(".cgi", "/usr/bin/env"));
     }
-
     for (std::map<std::string, std::string>::iterator it = cgi_exec.begin(); it != cgi_exec.end(); ++it)
     {
         const std::string &ext = it->first;
@@ -66,9 +65,7 @@ void completeCGI_executors(std::map<std::string, std::string> &cgi_exec)
         {
             std::map<std::string, std::string>::const_iterator default_it = DEFAULT_INTER.find(ext);
             if (default_it != DEFAULT_INTER.end())
-            {
                 inter = default_it->second;
-            }
             else
                 throw std::runtime_error("cgi extension " + ext + " need an interpreter");
         }
@@ -171,14 +168,24 @@ LocationRuntimeConfig buildLocation(const ServerRuntimeConfig &srv, const Locati
     if (ConfigUtils::hasDirective(raw.directives, "cgi"))
     {
         std::vector<std::string> values = ConfigUtils::getV(raw.directives, "cgi");
-        for (size_t i = 0; i + 1 < values.size(); i += 2)
+        size_t i = 0;
+        while (i < values.size())
         {
             std::string ext = values[i];
-            std::string exec = values[i + 1];
-            if (!ext.empty())
+            std::string exec = "";
+            if (i + 1 < values.size() && !values[i + 1].empty() && values[i + 1][0] != '.')
             {
-                loc.cgi_exec[ext] = exec;
+                exec = values[i + 1];
+                i += 2;
             }
+            else
+            {
+                // extension has no compilater
+                exec = "";
+                i += 1;
+            }
+            if (!ext.empty())
+                loc.cgi_exec[ext] = exec;
         }
     }
     if (!loc.cgi_exec.empty())

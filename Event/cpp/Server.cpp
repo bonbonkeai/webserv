@@ -25,7 +25,7 @@ volatile sig_atomic_t Server::g_running = 1;
 static bool shouldCloseByStatus(int statusCode)
 {
     if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 ||
-        statusCode == 431 || statusCode == 414 || statusCode == 501)
+        statusCode == 431 || statusCode == 414 || statusCode == 501 || statusCode == 500)
         return (true);
     return (false);
 }
@@ -427,13 +427,13 @@ void Server::start_cgi_for_client(Client *c, const HTTPRequest &req)
         close(proc->_write_fd);
         proc->_write_fd = -1;
     }
-    
+
     _cgi_manager.add_process(proc);
     if (proc->_read_fd >= 0)
         _epoller->add_event(proc->_read_fd, EPOLLIN | EPOLLET);
     if (proc->_write_fd >= 0 && req.method == "POST" && req.has_body)
         _epoller->add_event(proc->_write_fd, EPOLLOUT | EPOLLET);
-    
+
     c->_cgi = proc;
     c->is_cgi = true;
     c->_state = CGI_RUNNING;
@@ -591,6 +591,7 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
         proc->_state == CGI_Process::TIMEOUT)
     {
         finish_cgi_process(proc);
+        return;
     }
 }
 
@@ -601,6 +602,11 @@ void Server::finish_cgi_process(CGI_Process *proc)
         _epoller->del_event(proc->_read_fd);
     if (proc->_write_fd >= 0)
         _epoller->del_event(proc->_write_fd);
+    if (c)
+    {
+        c->_cgi = NULL;
+        c->is_cgi = false;
+    }
     if (!c)
     {
         proc->terminate();
