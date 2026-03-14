@@ -574,6 +574,25 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     }
     // normal
     HTTPResponse resp = process_request(req);
+    // 读请求里的 cookie
+    std::string session_id;
+    std::map<std::string, std::string>::const_iterator it = req.headers.find("cookie");
+    if (it != req.headers.end())
+    {
+        // 解析 "session_id=XXXX"
+        std::string cookie = it->second;
+        std::size_t pos = cookie.find("session_id=");
+        if (pos != std::string::npos)
+            session_id = cookie.substr(pos + 11, 16);
+    }
+
+    bool is_new = false;
+    Session *sess = _session_cookie->get_session(session_id, is_new);
+
+    // 如果是新 session，在响应里加 Set-Cookie
+    if (is_new)
+        resp.headers["set-cookie"] = "session_id=" + sess->_id + "; Path=/; HttpOnly";
+
     bool ka = computeKeepAlive(req, resp.statusCode);
     c.is_keep_alive = ka;
     applyConnectionHeader(resp, ka);

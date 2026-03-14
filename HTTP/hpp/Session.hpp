@@ -41,7 +41,7 @@ class   Session_manager
 
         std::string generate_id() const;
 
-        Session*    get_session(const std::string& name, bool is_new_session);
+        Session*    get_session(const std::string& name, bool &is_new_session);
         void    clean_up();
 
 };

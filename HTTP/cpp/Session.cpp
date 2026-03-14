@@ -2,6 +2,7 @@
 #include <ctime>
 Session_manager::Session_manager()
 {
+    std::srand(std::time(0)); 
 }
 
 Session_manager::~Session_manager()
@@ -25,7 +26,7 @@ std::string Session_manager::generate_id() const
  *  3. not find: create a new one 
  */
 
-Session *Session_manager::get_session(const std::string &name, bool is_new_session)
+Session *Session_manager::get_session(const std::string &name, bool &is_new_session)
 {
     (void)is_new_session;
     std::map<std::string, Session>::iterator    it = _cookies.find(name);
@@ -53,7 +54,7 @@ void Session_manager::clean_up()
          it != _cookies.end();)
     {
         if ((now - it->second.last_acces) > SESSION_TIMEOUT)
-            _cookies.erase(it);
+             _cookies.erase(it++);
         else
             ++it;
     }
