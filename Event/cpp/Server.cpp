@@ -690,11 +690,23 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
 
 void Server::finish_cgi_process(CGI_Process *proc)
 {
+    if (!_cgi_manager.is_known(proc))
+        return;
     Client *c = proc->client;
     if (proc->_read_fd >= 0)
+    {
         _epoller->del_event(proc->_read_fd);
+        _cgi_manager.unregiste_fd(proc->_read_fd);
+        proc->_read_fd = -1;
+    }
     if (proc->_write_fd >= 0)
+    {
         _epoller->del_event(proc->_write_fd);
+        _cgi_manager.unregiste_fd(proc->_write_fd);
+        proc->_write_fd = -1;
+    }
+
+    proc->terminate();
     if (c)
     {
         c->_cgi = NULL;
@@ -702,7 +714,6 @@ void Server::finish_cgi_process(CGI_Process *proc)
     }
     if (!c)
     {
-        proc->terminate();
         _cgi_manager.remove_and_delete(proc);
         return;
     }
@@ -869,26 +880,25 @@ void Server::run()
 void Server::valide_server_names()
 {
     std::map<int, std::set<std::string> > port_to_names;
-    
+
     for (size_t i = 0; i < _rt_servers.size(); ++i)
     {
         const ServerRuntimeConfig &srv = _rt_servers[i];
         int port = srv.port;
         const std::string &name = srv.server_name;
-        
+
         // 空 server_name 是允许的（作为 default server）
         if (name.empty())
             continue;
-        
+
         // 检查这个端口上是否已经有同名 server
         if (port_to_names[port].count(name))
         {
             throw std::runtime_error(
-                "Duplicate server_name '" + name + 
-                "' on port " + toString(port)
-            );
+                "Duplicate server_name '" + name +
+                "' on port " + toString(port));
         }
-        
+
         port_to_names[port].insert(name);
     }
 }
@@ -914,7 +924,7 @@ bool Server::load_config(const std::string &path)
     if (_rt_servers.empty())
         throw std::runtime_error("config: no server block found");
     valide_server_names();
-    
+
     if (_routing)
     {
         delete _routing;
