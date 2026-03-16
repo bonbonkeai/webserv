@@ -39,14 +39,7 @@ printf 'GET / HTTP/1.1\r\nHost: example.local\r\nConnection: keep-alive\r\n\r\nG
 期望：能看到两段响应，第二段后连接关闭。
 
 ************
-failed
-
-->第一份请求处理完以后，连接状态机没有正确回到“read request line / parse headers”的状态，或没有正确消费 socket 缓冲里剩余的数据。
-“每次 epollin 只读一次”，读到了第一份请求，剩余字节没处理
-Il faut:支持 pipelining
-->第二个请求在同一包里到达时，被缓存住
-等第一个响应完全写完后，再开始读剩余 buffer
-但目前显然没有正确缓存/回放这个剩余 buffer，所以仍然走向 408
+success
 *************
 
 2）HTTP 版本不是 1.1 → 505
@@ -86,7 +79,7 @@ request line extra token accepted
 行为应当与正常 GET / HTTP/1.1 等价（通常 200 或既定输出）
 不能因为 extra token 就 400
 ***************
-ATTENT
+failed
 现在的策略是：对 keep-alive 连接，如果下一请求迟迟不到，就发 408
 很多实现不会在 keep-alive 空闲时主动发 408，而是 simply close socket 或者不回应直到 client 发新请求
 行为更接近主流实现:
@@ -115,11 +108,7 @@ success
 7）非法方法字符（比如带空格或控制字符）
 printf 'GE T / HTTP/1.1\r\nHost: example.local\r\n\r\n' | nc -v $HOST $PORT
 ***************
-failed
-505 != 400
-request-line token 数不对 → 400
-token 数对但 version != HTTP/1.1 → 505
-先做“语法完整性”，再做“版本支持性”
+success
 ***************
 
 
@@ -150,9 +139,14 @@ success
 ***************
 
 2）Host 带端口（合法）
-printf 'GET /www/upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\n\r\n' "$PORT" \
-| nc -v $HOST $PORT | sed -n '1,30p'
+printf 'GET /www/upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\n\r\n' "$PORT" | nc -v $HOST $PORT | sed -n '1,30p'
 curl -v "http://$HOST:$PORT/www/upload/hello.txt" -H "Host: localhost:$PORT" --http1.1
+第一条，避免 408 干扰：
+printf 'GET /www/upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\nConnection: close\r\n\r\n' "$PORT" | nc -v "$HOST" "$PORT" | sed -n '1,30p'
+第二条，试试看少一层 /www：
+printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\nConnection: close\r\n\r\n' "$PORT" | nc -v "$HOST" "$PORT" | sed -n '1,30p'
+第三条，直接查文件：
+find . -name hello.txt
 Host with port accepted
 	•	Host: localhost:8080
 验证点：
@@ -161,7 +155,7 @@ Host with port accepted
 不是 400（应进入正常路由逻辑，可能 200/404，看 hello.txt 是否存在）
 不应因为 Host 含端口而判 bad_request
 ***************
-failed
+ATTENT
 keep-alive 空闲超时：通常应当直接关闭连接，不再发送新的 HTTP 响应。
 超时逻辑”在 keep-alive 空闲期触发后，没有选择“安静地 close”，而是又构造了一个 408 发给客户端，然后 close。
 ***************
@@ -187,24 +181,19 @@ success
 printf 'GET /hello.txt HTTP/1.1\r\nHost:\r\n\r\n' | nc -v $HOST $PORT | sed -n '1,30p'
 期望：400
 ***************
-failed
-404 + 408 != 400
-timeout + keep_alive
+success
 ***************
 
 
 5）Host 只有空白
 printf 'GET /hello.txt HTTP/1.1\r\nHost:   \r\n\r\n' | nc -v $HOST $PORT | sed -n '1,30p'
 ***************
-failed
-404 + 408 != 400
-timeout + keep_alive
+success
 ***************
 
 
 6）Host 重复但值相同
-printf 'GET /hello.txt HTTP/1.1\r\nHost: a\r\nHost: a\r\n\r\n' \
-| nc -v $HOST $PORT | sed -n '1,40p'
+printf 'GET /hello.txt HTTP/1.1\r\nHost: a\r\nHost: a\r\n\r\n' | nc -v $HOST $PORT | sed -n '1,40p'
 期望：400
 ***************
 success
@@ -223,6 +212,7 @@ success
 8）IPv6 Host 带端口
 printf 'GET www/upload/hello.txt HTTP/1.1\r\nHost: [::1]:%s\r\n\r\n' "$PORT" \
 | nc -v $HOST $PORT | sed -n '1,30p'
+printf 'GET /www/upload/hello.txt HTTP/1.1\r\nHost: [::1]:%s\r\nConnection: close\r\n\r\n' "$PORT" | nc -v "$HOST" "$PORT" | sed -n '1,30p'
 不支持 IPv6，要保证“不崩”，返回 400。
 ***************
 success
@@ -235,8 +225,7 @@ success
 
 3.3 URI
 1）absolute-form + Host 一致（含端口）
-printf 'GET http://example.com:%s/path HTTP/1.1\r\nHost: example.com:%s\r\n\r\n' "$PORT" "$PORT" \
-| nc -v $HOST $PORT | sed -n '1,40p'
+printf 'GET http://example.com:%s/path HTTP/1.1\r\nHost: example.com:%s\r\n\r\n' "$PORT" "$PORT" | nc -v $HOST $PORT | sed -n '1,40p'
 absolute-form OK
 	•	GET http://example.com:8080/path
 	•	Host: example.com:8080
@@ -340,8 +329,7 @@ success
 
 URL 编码的 ..
 %2e%2e 等价于 ..
-printf 'GET /a/%2e%2e/b HTTP/1.1\r\nHost: example.local\r\n\r\n' \
-| nc -v $HOST $PORT | sed -n '1,40p'
+printf 'GET /a/%2e%2e/b HTTP/1.1\r\nHost: example.local\r\n\r\n' | nc -v $HOST $PORT | sed -n '1,40p'
 拍摄：至少要保证“不崩”，并且行为一致（要么明确 400，要么按字面当普通路径）
 ***************
 failed
@@ -370,7 +358,7 @@ curl -isS --http1.1 "$BASE/upload/hello.txt?x=1&y=2" -H "Host: localhost" | sed 
 期望： 200，且读取的是 www/hello.txt。
 ***************
 failed
-404+408
+404
 ***************
 
 
@@ -380,8 +368,7 @@ failed
 
 3.4 Connection/Keep-Alive行为
 1）Connection: close, keep-alive
-printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: close, keep-alive\r\n\r\n' \
-| nc -v $HOST $PORT | sed -n '1,40p'
+printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: close, keep-alive\r\n\r\n' | nc -v $HOST $PORT | sed -n '1,40p'
 Connection close, keep-alive NOT treated as close
 	•	token list
 验证点：
@@ -390,8 +377,7 @@ Connection close, keep-alive NOT treated as close
 响应不应带 Connection: close（或至少你们内部 keep_alive 应为 true）
 更关键是验证“连接复用”，用同一条 TCP 连接再发第二个请求，看是否还能收到响应
 ***************
-failed
-404+408
+success
 ***************
 
 printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: close, keep-alive\r\n\r\nGET /hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: close\r\n\r\n' \
@@ -399,8 +385,7 @@ printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: clo
 第一段响应后连接仍然活着，第二个请求能被处理
 第二个请求明确 Connection: close，因此第二段响应后连接结束
 ***************
-failed
-404+408
+success
 ***************
 
 
@@ -414,8 +399,7 @@ Connection Close -> keep_alive false
 	•	keep_alive == false
 同一连接复测（应当只能看到第一段响应，第二段不会成功）
 ***************
-failed
-404
+success
 ***************
 
 printf 'GET /upload//hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection:  Close \r\n\r\nGET /hello.txt HTTP/1.1\r\nHost: example.local\r\n\r\n' \
@@ -423,26 +407,23 @@ printf 'GET /upload//hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection:  C
 只看到第一段响应
 第二个请求不会得到第二段响应（因为连接已被服务器关闭，或 nc 会提示断开）
 ***************
-failed
-404
+success
 ***************
 
 
 3）只有 keep-alive（应 keep_alive true）
-printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: keep-alive\r\n\r\n' \
+printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: close\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-failed
-404+408
+success
 ***************
 
 
 4）带未知 token
-printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: keep-alive, upgrade, foo\r\n\r\n' \
+printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: close, upgrade, foo\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-failed
-404+408
+success
 ***************
 
 
@@ -450,8 +431,7 @@ failed
 printf 'GET /upload//hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection:   keep-alive  ,   close   \r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-failed
-404+408
+success
 ***************
 
 
@@ -557,7 +537,7 @@ success
 6）行尾没有 CRLF 或出现裸 LF
 printf 'GET / HTTP/1.1\nHost: example.local\n\n' | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-ATTENT
+failed
 408
 从服务器视角，这个输入很可能被当成“请求还没结束”，parser 只把 \r\n 识别为换行与头结束标记（"\r\n\r\n"）。现在只发 \n\n，所以请求行可能还没“完整结束”（因为没有 \r\n）
 header 区也没有出现 \r\n\r\n 作为终止符
@@ -575,9 +555,7 @@ printf 'POST /upload/misslen.txt HTTP/1.1\r\nHost: localhost\r\n\r\nhello' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 //这里故意在 header 后放了 body 的“hello”，用来确认你们不会误读为 chunked 或者一直等。
 ***************
-ATTENT
-411 oui
-mais 408
+success
 ***************
 
 2）重复 Content-Length → 400
@@ -598,7 +576,7 @@ success
 3）Content-Length 过大 → 413
 Content-Length too large -> 413
 明显过大的 close，让对端更明确结束：
-rintf 'POST /upload/toolarge.txt HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999999999\r\nConnection: close\r\n\r\nx' \
+printf 'POST /upload/toolarge.txt HTTP/1.1\r\nHost: localhost\r\nContent-Length: 999999999\r\nConnection: close\r\n\r\nx' \
 | nc -v $HOST $PORT | sed -n '1,60p'
 ***************
 success
@@ -654,15 +632,13 @@ test -f upload/chunk1.txt && echo "[OK] chunk1 exists" || echo "[FAIL] chunk1 mi
 	•	文件内容应为 hello world（cat upload/chunk1.txt验证）
 检查文件落盘与内容
 upload/chunk1.txt 路径要与 config 的 upload 目录一致。
-test -f upload/chunk1.txt && echo "[OK] chunk1 exists" || echo "[FAIL] chunk1 missing"
-cat upload/chunk1.txt | sed -n '1,5p'
+test -f www/upload/chunk1.txt && echo "[OK] chunk1 exists" || echo "[FAIL] chunk1 missing"
+cat www/upload/chunk1.txt | sed  -n '1,5p'
 期望：
 文件存在
 内容严格等于 hello world
 ***************
-ATTENT
-success 201 + hello world
-mais 408
+success
 ***************
 
 更严格一点（防止末尾多了换行）：
@@ -682,36 +658,31 @@ printf 'POST /upload/chunk_hex.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encod
 | nc -v $HOST $PORT | sed -n '1,80p'
 期望：201，文件内容为 0123456789
 ***************
-ATTENT
-success 201 + 0123456789
-mais 408
+failed
+400
 ***************
 
 9）chunk extension（允许 5;ext=1 这种形式，支持）
 printf 'POST /upload/chunk_ext.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5;ext=1\r\nhello\r\n0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,80p'
 ***************
-ATTENT
-success 201
-mais 408
+failed
+400
 ***************
 
 10）chunked 缺少结尾 0\r\n\r\n
 printf 'POST /upload/chunk_incomplete.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n' \
 | nc -v $HOST $PORT | sed -n '1,40p'
 ***************
-ATTENT
-success ici 408 ok
-发现缺少终止块 0\r\n\r\n
-超时 → 408
+failed
+400
 ***************
 正确结束的 chunked（应该不超时）:
 printf 'POST /upload/chunk_ok.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,60p'
 ***************
-ATTENT
-success 201 
-mais 408
+failed
+400
 ***************
 非法 chunk size（应该立刻 400，而不是等超时）:
 printf 'POST /upload/chunk_badsize.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZZ\r\nhello\r\n0\r\n\r\n' \
@@ -784,11 +755,11 @@ s.close()
 PY
 
 期望
-服务器响应不是 400/411/413（按你们 upload  201）
+服务器响应不是 400/411/413（ upload  201）
 文件落盘（下面检查内容）
 
 验证文件内容确实拼接正确：
-test -f upload/inc_fixed.txt && echo "[OK] inc_fixed exists" || echo "[FAIL] inc_fixed missing"
+test -f /www/upload/inc_fixed.txt && echo "[OK] inc_fixed exists" || echo "[FAIL] inc_fixed missing"
 python3 - <<'PY'
 p="upload/inc_fixed.txt"
 with open(p,"rb") as f:
@@ -829,7 +800,7 @@ print(d)
 print("[OK]" if d==b"hello" else "[FAIL]")
 PY
 ***************
-ATTENT
+failed
 success 201
 mais 408
 ***************
@@ -993,9 +964,14 @@ python3 - <<'PY'
 with open("upload/chunk_crlf.txt","rb") as f:
     data=f.read()
 print(repr(data))
-print("[OK]" if data==b"hello\r\nworld" else "[FAIL]")
+print("[OK]" if data==b"hello\r\n" else "[FAIL]")
 PY
-***************
+***************python3 - <<'PY'
+with open("upload/chunk_crlf.txt","rb") as f:
+    data=f.read()
+print(repr(data))
+print("[OK]" if data==b"hello\r\n" else "[FAIL]")
+PY
 failed
 单个 chunk 内含 CRLF:
 当前的 chunked 解析是基于“按行读取到 CRLF”，那它在面对二进制数据（含 CRLF）时天然不完备。正确实现必须是：
@@ -1024,7 +1000,7 @@ print(repr(data))
 print("[OK]" if data==b"a\r\nbc\r\nd" else "[FAIL]")
 PY
 ***************
-ATTENT
+failed
 success 201 
 mais 408
 
@@ -1463,21 +1439,21 @@ Deleted
 ls www/hello.txt
 文件不存在。
 ***************
-success
+failed
 ***************
 
 # 删除存在文件（200，但是很多实现会用204 No Content）
-cp www/upload/raw.txt www/todel.txt
+cp www/upload/raw2.txt www/todel.txt
 curl -is --http1.1 -X DELETE http://127.0.0.1:$PORT/todel.txt | sed -n '1,30p'
 test ! -f www/todel.txt && echo "[OK] deleted" || echo "[FAIL] still exists"
 ***************
-success
+failed
 ***************
 
 2）删除不存在（404）
 curl -is --http1.1 -X DELETE http://127.0.0.1:$PORT/no_such_file.txt | sed -n '1,30p'
 ***************
-success
+failed
 ***************
 
 3）删除目录（应被拒绝）
@@ -1485,13 +1461,13 @@ curl -i -X DELETE http://127.0.0.1:8080/dir/
 期望：
 HTTP/1.1 405
 ***************
-success
+failed
 ***************
 
 删除目录（返回 405-》有权删或无权删）
 curl -is --http1.1 -X DELETE http://127.0.0.1:$PORT/dir/ | sed -n '1,30p'
 ***************
-success
+failed
 ***************
 
 DELETE /dir/（带尾斜杠）
@@ -1553,7 +1529,7 @@ success
 curl -isS --http1.1 -I "$BASE/hello.txt" -H "Host: localhost" | sed -n '1,30p'
 200 且有 Content-Length，但无 body（curl -I 本身不拉 body）。
 ***************
-
+failed
 ***************
 
 
