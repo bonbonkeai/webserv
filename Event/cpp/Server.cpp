@@ -166,6 +166,7 @@ bool Server::init_sockets()
     std::set<int> ports;
     for (size_t i = 0; i < _rt_servers.size(); i++)
         ports.insert(_rt_servers[i].port);
+
     for (std::set<int>::iterator it = ports.begin(); it != ports.end(); ++it)
     {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -865,6 +866,32 @@ void Server::run()
 //     // Your codebase moved CGI handling to CGIRequestHandle.
 //     // This function is intentionally left as a no-op.
 // }
+void Server::valide_server_names()
+{
+    std::map<int, std::set<std::string> > port_to_names;
+    
+    for (size_t i = 0; i < _rt_servers.size(); ++i)
+    {
+        const ServerRuntimeConfig &srv = _rt_servers[i];
+        int port = srv.port;
+        const std::string &name = srv.server_name;
+        
+        // 空 server_name 是允许的（作为 default server）
+        if (name.empty())
+            continue;
+        
+        // 检查这个端口上是否已经有同名 server
+        if (port_to_names[port].count(name))
+        {
+            throw std::runtime_error(
+                "Duplicate server_name '" + name + 
+                "' on port " + toString(port)
+            );
+        }
+        
+        port_to_names[port].insert(name);
+    }
+}
 
 bool Server::load_config(const std::string &path)
 {
@@ -884,13 +911,15 @@ bool Server::load_config(const std::string &path)
         }
         _rt_servers.push_back(srv);
     }
+    if (_rt_servers.empty())
+        throw std::runtime_error("config: no server block found");
+    valide_server_names();
+    
     if (_routing)
     {
         delete _routing;
         _routing = NULL;
     }
-    if (_rt_servers.empty())
-        throw std::runtime_error("config: no server block found");
 
     _routing = new Routing(_rt_servers);
 
