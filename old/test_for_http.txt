@@ -374,10 +374,6 @@ failed
 ***************
 
 
-
-
-
-
 3.4 Connection/Keep-Alive行为
 1）Connection: close, keep-alive
 printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: close, keep-alive\r\n\r\n' \

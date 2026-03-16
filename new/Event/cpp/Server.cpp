@@ -1,6 +1,6 @@
 #include "Event/hpp/Server.hpp"
-#include <arpa/inet.h>   // inet_ntop
-#include <netinet/in.h>  // sockaddr_in
+#include <arpa/inet.h>  // inet_ntop
+#include <netinet/in.h> // sockaddr_in
 #include <sys/socket.h>
 #include <cerrno>
 #include <csignal>
@@ -22,12 +22,20 @@ volatile sig_atomic_t Server::g_running = 1;
 // keep-alive policy
 // --------------------
 
+// static bool shouldCloseByStatus(int statusCode)
+// {
+//     if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 ||
+//         statusCode == 431 || statusCode == 414 || statusCode == 501 || statusCode == 500)
+//         return (true);
+//     return (false);
+// }
 static bool shouldCloseByStatus(int statusCode)
 {
-    if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 ||
-        statusCode == 431 || statusCode == 414 || statusCode == 501)
-        return (true);
-    return (false);
+    if (statusCode == 400 || statusCode == 403 || statusCode == 408 ||
+        statusCode == 411 || statusCode == 413 || statusCode == 414 ||
+        statusCode == 431 || statusCode == 500 || statusCode == 501)
+        return true;
+    return false;
 }
 
 static bool computeKeepAlive(const HTTPRequest &req, int statusCode)
@@ -101,13 +109,25 @@ void Server::cleanup()
         }
         _manager->clear_all_clients();
     }
+    // if (socketfd >= 0)
+    //{
+    //     if (_epoller)
+    //         _epoller->del_event(socketfd);
+    //     close(socketfd);
+    //     socketfd = -1;
+    // }
     if (socketfd >= 0)
     {
-        if (_epoller)
-            _epoller->del_event(socketfd);
-        close(socketfd);
+        for (size_t i = 0; i < _listen_fds.size(); ++i)
+        {
+            _epoller->del_event(_listen_fds[i]);
+            close(_listen_fds[i]);
+        }
+        _listen_fds.clear();
+        _fd_to_port.clear();
         socketfd = -1;
     }
+
     if (_epoller)
     {
         delete _epoller;
@@ -130,22 +150,54 @@ void Server::cleanup()
     }
 }
 
+// bool Server::init_sockets()
+//{
+//     socketfd = socket(AF_INET, SOCK_STREAM, 0);
+//     if (socketfd < 0)
+//         throw std::runtime_error("Socket create failed");
+//     int yes = 1;
+//     setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+//     struct sockaddr_in serveraddr;
+//     std::memset(&serveraddr, 0, sizeof(serveraddr));
+//     serveraddr.sin_family = AF_INET;
+//     serveraddr.sin_port = htons(port_nbr);
+//     serveraddr.sin_addr.s_addr = INADDR_ANY;
+//     if (bind(socketfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
+//         throw std::runtime_error("Socket bind failed");
+//     if (listen(socketfd, 256) < 0)
+//         throw std::runtime_error("Listen socket failed");
+//     return (_epoller->init(128));
+// }
+
 bool Server::init_sockets()
 {
-    socketfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socketfd < 0)
-        throw std::runtime_error("Socket create failed");
-    int yes = 1;
-    setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-    struct sockaddr_in serveraddr;
-    std::memset(&serveraddr, 0, sizeof(serveraddr));
-    serveraddr.sin_family = AF_INET;
-    serveraddr.sin_port = htons(port_nbr);
-    serveraddr.sin_addr.s_addr = INADDR_ANY;
-    if (bind(socketfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
-        throw std::runtime_error("Socket bind failed");
-    if (listen(socketfd, 256) < 0)
-        throw std::runtime_error("Listen socket failed");
+    std::set<int> ports;
+    for (size_t i = 0; i < _rt_servers.size(); i++)
+        ports.insert(_rt_servers[i].port);
+    for (std::set<int>::iterator it = ports.begin(); it != ports.end(); ++it)
+    {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0)
+            throw std::runtime_error("Socket create failed");
+        int yes = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        struct sockaddr_in serveraddr;
+        std::memset(&serveraddr, 0, sizeof(serveraddr));
+        serveraddr.sin_family = AF_INET;
+        serveraddr.sin_port = htons(*it);
+        serveraddr.sin_addr.s_addr = INADDR_ANY;
+        if (bind(fd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
+            throw std::runtime_error("Socket bind failed");
+        if (listen(fd, 256) < 0)
+            throw std::runtime_error("Listen socket failed");
+        _listen_fds.push_back(fd);
+        _fd_to_port[fd] = *it;
+    }
+    if (!_listen_fds.empty())
+    {
+        socketfd = _listen_fds[0];
+        port_nbr = _fd_to_port[socketfd];
+    }
     return (_epoller->init(128));
 }
 
@@ -177,13 +229,41 @@ void Server::set_non_block_fd(int fd)
 //     }
 //     return true;
 // }
-bool Server::handle_connection()
+// bool Server::handle_connection()
+//{
+//    while (true)
+//    {
+//        struct sockaddr_in clientaddr;
+//        socklen_t client_len = sizeof(clientaddr);
+//        int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
+//        if (connect_fd < 0)
+//        {
+//            if (errno == EAGAIN || errno == EWOULDBLOCK)
+//                return (true);
+//            return (false);
+//        }
+//        set_non_block_fd(connect_fd);
+//        _epoller->add_event(connect_fd, EPOLLIN | EPOLLET);
+//        _manager->add_socket_client(connect_fd);
+//        Client *c = _manager->get_socket_client_by_fd(connect_fd);
+//        if (c)
+//        {
+//            char ip[INET_ADDRSTRLEN];
+//            const char *p = inet_ntop(AF_INET, &clientaddr.sin_addr, ip, sizeof(ip));
+//            c->remote_addr = (p ? std::string(ip) : std::string("")); // fallback empty if fail
+//        }
+//    }
+//    return (true);
+//}
+
+// multi server
+bool Server::handle_connection_on(int listen_fd, int port)
 {
     while (true)
     {
         struct sockaddr_in clientaddr;
         socklen_t client_len = sizeof(clientaddr);
-        int connect_fd = accept(socketfd, (struct sockaddr *)&clientaddr, &client_len);
+        int connect_fd = accept(listen_fd, (struct sockaddr *)&clientaddr, &client_len);
         if (connect_fd < 0)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -199,6 +279,7 @@ bool Server::handle_connection()
             char ip[INET_ADDRSTRLEN];
             const char *p = inet_ntop(AF_INET, &clientaddr.sin_addr, ip, sizeof(ip));
             c->remote_addr = (p ? std::string(ip) : std::string("")); // fallback empty if fail
+            c->port = port;
         }
     }
     return (true);
@@ -207,11 +288,11 @@ bool Server::handle_connection()
 // --------------------
 // Close helpers (important for avoiding segfault)
 // --------------------
-void Server::cleanup_client_cgi(Client* c)
+void Server::cleanup_client_cgi(Client *c)
 {
     if (!c)
         return;
-    CGI_Process* proc = c->_cgi;
+    CGI_Process *proc = c->_cgi;
     c->_cgi = NULL;
     c->is_cgi = false;
     if (!proc)
@@ -275,6 +356,37 @@ bool Server::do_read(Client &c)
                 c.write_pos = 0;
                 return (true);
             }
+            // headers 已经结束，parser 正在等 body 时，先 resolve config 再检查 Content-Length
+            const HTTPRequest& parsed = c.parser.getRequest();
+            if (ok &&
+                c.parser.isWaitingBody() &&
+                !parsed.has_effective)
+            {
+                HTTPRequest tmpReq = parsed;
+                if (_routing)
+                {
+                    tmpReq.effective = _routing->resolve(tmpReq, c.port, tmpReq._rout);
+                    tmpReq.max_body_size = tmpReq.effective.max_body_size;
+                    tmpReq.has_effective = true;
+                    // std::cerr << "[DBG] path=" << tmpReq.path
+                    //         << " cl=" << tmpReq.contentLength
+                    //         << " limit=" << tmpReq.max_body_size
+                    //         << " waitingBody=" << c.parser.isWaitingBody()
+                    //         << std::endl;
+                    if (tmpReq.has_content_length && tmpReq.contentLength > tmpReq.max_body_size)
+                    {
+                        // std::cerr << "[DBG] early 413 triggered" << std::endl;
+                        HTTPResponse err = buildErrorResponse(413);
+                        bool ka = computeKeepAlive(tmpReq, 413);
+                        c.is_keep_alive = ka;
+                        applyConnectionHeader(err, ka);
+                        c.write_buffer = ResponseBuilder::build(err);
+                        c.write_pos = 0;
+                        c._state = WRITING;
+                        return (true);
+                    }
+                }
+            }
             continue;
         }
         if (n == 0)
@@ -323,7 +435,7 @@ bool Server::do_write(Client &c)
             return (false);
 
         c.is_keep_alive = false;
-        return(true);
+        return (true);
     }
     return (true);
 }
@@ -358,7 +470,13 @@ void Server::check_timeout()
         Client *c = _manager->get_socket_client_by_fd(fd);
         if (!c)
             continue;
-        HTTPResponse err = buildErrorResponse(408);
+        const HTTPRequest& req = c->parser.getRequest();
+        int code = 408;
+        // incomplete chunked body 超时，按坏请求处理
+        if (!req.complet && req.chunked)
+            code = 400;
+        HTTPResponse err = buildErrorResponse(code);
+        // HTTPResponse err = buildErrorResponse(408);
         err.headers["connection"] = "close";
         if (err.headers.find("content-length") == err.headers.end())
             err.headers["content-length"] = toString(err.body.size());
@@ -373,12 +491,13 @@ void Server::check_timeout()
 void Server::check_cgi_timeout()
 {
     unsigned long long now = Client::now_ms();
-    std::vector<CGI_Process*> timed_out;
-    std::vector<CGI_Process*>& procs = _cgi_manager.all_processes();
+    std::vector<CGI_Process *> timed_out;
+    std::vector<CGI_Process *> &procs = _cgi_manager.all_processes();
     for (size_t i = 0; i < procs.size(); ++i)
     {
-        CGI_Process* proc = procs[i];
-        if (!proc || !proc->is_running()) continue;
+        CGI_Process *proc = procs[i];
+        if (!proc || !proc->is_running())
+            continue;
         unsigned long long diff = now - proc->start_time_ms;
         bool timeout = false;
         if (!proc->has_output && diff > START_TIMEOUT)
@@ -395,7 +514,7 @@ void Server::check_cgi_timeout()
     }
     for (size_t i = 0; i < timed_out.size(); ++i)
     {
-        CGI_Process* proc = timed_out[i];
+        CGI_Process *proc = timed_out[i];
         proc->_state = CGI_Process::TIMEOUT;
         finish_cgi_process(proc);
     }
@@ -404,13 +523,14 @@ void Server::check_cgi_timeout()
 // Build response
 // --------------------
 
-void Server::start_cgi_for_client(Client* c, const HTTPRequest& req)
+void Server::start_cgi_for_client(Client *c, const HTTPRequest &req)
 {
-    CGI_Process* proc = new CGI_Process();
+    CGI_Process *proc = new CGI_Process();
     if (!proc->execute(req.effective, req, c))
     {
+        int code = proc->_error_code;
         delete proc;
-        HTTPResponse err = buildErrorResponse(500);
+        HTTPResponse err = buildErrorResponse(code);
         err.headers["connection"] = "close";
         c->is_keep_alive = false;
         c->write_buffer = ResponseBuilder::build(err);
@@ -419,16 +539,19 @@ void Server::start_cgi_for_client(Client* c, const HTTPRequest& req)
         _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
         return;
     }
-    _cgi_manager.add_process(proc);
-    if (proc->_read_fd >= 0)
-        _epoller->add_event(proc->_read_fd, EPOLLIN | EPOLLET);
-    if (proc->_write_fd >= 0 && req.method == "POST" && req.has_body)
-        _epoller->add_event(proc->_write_fd, EPOLLOUT | EPOLLET);
+
     if (!(req.method == "POST" && req.has_body) && proc->_write_fd >= 0)
     {
         close(proc->_write_fd);
         proc->_write_fd = -1;
     }
+
+    _cgi_manager.add_process(proc);
+    if (proc->_read_fd >= 0)
+        _epoller->add_event(proc->_read_fd, EPOLLIN | EPOLLET);
+    if (proc->_write_fd >= 0 && req.method == "POST" && req.has_body)
+        _epoller->add_event(proc->_write_fd, EPOLLOUT | EPOLLET);
+
     c->_cgi = proc;
     c->is_cgi = true;
     c->_state = CGI_RUNNING;
@@ -440,11 +563,11 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     // resolve effective config
     if (_routing)
     {
-        req.effective = _routing->resolve(req, port_nbr, req._rout);
-        //debug
-        std::cout << "[DBG] ACTION_CGI=" << ACTION_CGI
-          << " req.action=" << req._rout.action << std::endl;
-        //
+        req.effective = _routing->resolve(req, c.port, req._rout);
+        std::cerr << "[DBG] req.path=" << req.path
+          << " rout.action=" << req._rout.action
+          << " fs_path=" << req._rout.fs_path
+          << std::endl;
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
@@ -466,14 +589,59 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
         return (true);
     }
+    // 413 body size
+    if (req.has_body && req.body.size() > req.effective.max_body_size)
+    {
+        HTTPResponse err = buildErrorResponse(413);
+        bool ka = computeKeepAlive(req, 413);
+        c.is_keep_alive = ka;
+        applyConnectionHeader(err, ka);
+        c.write_buffer = ResponseBuilder::build(err);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return true;
+    }
+
     // CGI
     if (req._rout.action == ACTION_CGI)
     {
         start_cgi_for_client(&c, req);
-        return (true);
+        return true;
+    }
+    if (req.effective.forbidden)
+    {
+        HTTPResponse err = buildErrorResponse(403);
+        bool ka = computeKeepAlive(req, 403);
+        c.is_keep_alive = ka;
+        applyConnectionHeader(err, ka);
+        c.write_buffer = ResponseBuilder::build(err);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return true;
     }
     // normal
     HTTPResponse resp = process_request(req);
+    // 读请求里的 cookie
+    std::string session_id;
+    std::map<std::string, std::string>::const_iterator it = req.headers.find("cookie");
+    if (it != req.headers.end())
+    {
+        // 解析 "session_id=XXXX"
+        std::string cookie = it->second;
+        std::size_t pos = cookie.find("session_id=");
+        if (pos != std::string::npos)
+            session_id = cookie.substr(pos + 11, 16);
+    }
+
+    bool is_new = false;
+    Session *sess = _session_cookie->get_session(session_id, is_new);
+
+    // 如果是新 session，在响应里加 Set-Cookie
+    if (is_new)
+        resp.headers["set-cookie"] = "session_id=" + sess->_id + "; Path=/; HttpOnly";
+
     bool ka = computeKeepAlive(req, resp.statusCode);
     c.is_keep_alive = ka;
     applyConnectionHeader(resp, ka);
@@ -486,7 +654,7 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
 
 void Server::handle_cgi_event(int fd, uint32_t ev)
 {
-    CGI_Process* proc = _cgi_manager.get_process_by_fd(fd);
+    CGI_Process *proc = _cgi_manager.get_process_by_fd(fd);
     if (!proc)
     {
         _epoller->del_event(fd);
@@ -509,19 +677,21 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
         finish_cgi_process(proc);
         return;
     }
-    Client* c = proc->client;
+    Client *c = proc->client;
     if (!c)
     {
         // 没 client 了，直接回收
-        if (proc->_read_fd >= 0) _epoller->del_event(proc->_read_fd);
-        if (proc->_write_fd >= 0) _epoller->del_event(proc->_write_fd);
+        if (proc->_read_fd >= 0)
+            _epoller->del_event(proc->_read_fd);
+        if (proc->_write_fd >= 0)
+            _epoller->del_event(proc->_write_fd);
         _cgi_manager.kill_and_remove(proc);
         return;
     }
     // 写 stdin（POST body）
     if ((ev & EPOLLOUT) && proc->_write_fd == fd)
     {
-        const HTTPRequest& req = c->parser.getRequest();
+        const HTTPRequest &req = c->parser.getRequest();
         bool done = proc->write_body(req.body);
         if (done)
             _epoller->del_event(fd); // 写端完成就不监听了
@@ -562,16 +732,22 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
         proc->_state == CGI_Process::TIMEOUT)
     {
         finish_cgi_process(proc);
+        return;
     }
 }
 
-void Server::finish_cgi_process(CGI_Process* proc)
+void Server::finish_cgi_process(CGI_Process *proc)
 {
-    Client* c = proc->client;
-    if (proc->_read_fd >= 0) 
+    Client *c = proc->client;
+    if (proc->_read_fd >= 0)
         _epoller->del_event(proc->_read_fd);
     if (proc->_write_fd >= 0)
         _epoller->del_event(proc->_write_fd);
+    if (c)
+    {
+        c->_cgi = NULL;
+        c->is_cgi = false;
+    }
     if (!c)
     {
         proc->terminate();
@@ -608,8 +784,15 @@ void Server::finish_cgi_process(CGI_Process* proc)
 
 void Server::run()
 {
-    set_non_block_fd(socketfd);
-    _epoller->add_event(socketfd, EPOLLIN | EPOLLET);
+    // set_non_block_fd(socketfd);
+    //_epoller->add_event(socketfd, EPOLLIN | EPOLLET);
+    // multi server
+    for (size_t i = 0; i < _listen_fds.size(); ++i)
+    {
+        set_non_block_fd(_listen_fds[i]);
+        _epoller->add_event(_listen_fds[i], EPOLLIN | EPOLLET);
+    }
+
     while (g_running)
     {
         int nfds = _epoller->wait(Timeout);
@@ -620,13 +803,19 @@ void Server::run()
             int fd = _epoller->get_event_fd(i);
             uint32_t ev = _epoller->get_event_type(i);
             // 1) listen
-            if (fd == socketfd)
+            // if (fd == socketfd)
+            //{
+            //    handle_connection();
+            //    continue;
+            //}
+            // multi server
+            if (_fd_to_port.count(fd))
             {
-                handle_connection();
+                handle_connection_on(fd, _fd_to_port[fd]);
                 continue;
             }
             // 2) CGI fds
-           if (_cgi_manager.is_cgi_fd(fd))
+            if (_cgi_manager.is_cgi_fd(fd))
             {
                 handle_cgi_event(fd, ev);
                 continue;
