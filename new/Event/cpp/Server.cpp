@@ -357,7 +357,7 @@ bool Server::do_read(Client &c)
                 return (true);
             }
             // headers 已经结束，parser 正在等 body 时，先 resolve config 再检查 Content-Length
-            const HTTPRequest& parsed = c.parser.getRequest();
+            const HTTPRequest &parsed = c.parser.getRequest();
             if (ok &&
                 c.parser.isWaitingBody() &&
                 !parsed.has_effective)
@@ -470,7 +470,7 @@ void Server::check_timeout()
         Client *c = _manager->get_socket_client_by_fd(fd);
         if (!c)
             continue;
-        const HTTPRequest& req = c->parser.getRequest();
+        const HTTPRequest &req = c->parser.getRequest();
         int code = 408;
         // incomplete chunked body 超时，按坏请求处理
         if (!req.complet && req.chunked)
@@ -565,9 +565,9 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     {
         req.effective = _routing->resolve(req, c.port, req._rout);
         std::cerr << "[DBG] req.path=" << req.path
-          << " rout.action=" << req._rout.action
-          << " fs_path=" << req._rout.fs_path
-          << std::endl;
+                  << " rout.action=" << req._rout.action
+                  << " fs_path=" << req._rout.fs_path
+                  << std::endl;
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
@@ -696,6 +696,8 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
         if (done)
             _epoller->del_event(fd); // 写端完成就不监听了
     }
+    if (!_cgi_manager.is_known(proc))
+        return;
     // 读 stdout
     // if ((ev & EPOLLIN) && proc->_read_fd == fd)
     // {
@@ -727,6 +729,8 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
         if (proc->_read_fd < 0)
             _epoller->del_event(fd);
     }
+    if (!_cgi_manager.is_known(proc))
+        return;
     if (proc->_state == CGI_Process::FINISHED ||
         proc->_state == CGI_Process::ERROR ||
         proc->_state == CGI_Process::TIMEOUT)
@@ -738,11 +742,23 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
 
 void Server::finish_cgi_process(CGI_Process *proc)
 {
+    if (!_cgi_manager.is_known(proc))
+        return;
     Client *c = proc->client;
     if (proc->_read_fd >= 0)
+    {
         _epoller->del_event(proc->_read_fd);
+        _cgi_manager.unregiste_fd(proc->_read_fd);
+        proc->_read_fd = -1;
+    }
     if (proc->_write_fd >= 0)
+    {
         _epoller->del_event(proc->_write_fd);
+        _cgi_manager.unregiste_fd(proc->_write_fd);
+        proc->_write_fd = -1;
+    }
+
+    proc->terminate();
     if (c)
     {
         c->_cgi = NULL;
@@ -750,7 +766,6 @@ void Server::finish_cgi_process(CGI_Process *proc)
     }
     if (!c)
     {
-        proc->terminate();
         _cgi_manager.remove_and_delete(proc);
         return;
     }
@@ -914,6 +929,31 @@ void Server::run()
 //     // Your codebase moved CGI handling to CGIRequestHandle.
 //     // This function is intentionally left as a no-op.
 // }
+void Server::valide_server_names()
+{
+    std::map<int, std::set<std::string> > port_to_names;
+
+    for (size_t i = 0; i < _rt_servers.size(); ++i)
+    {
+        const ServerRuntimeConfig &srv = _rt_servers[i];
+        int port = srv.port;
+        const std::string &name = srv.server_name;
+
+        // 空 server_name 是允许的（作为 default server）
+        if (name.empty())
+            continue;
+
+        // 检查这个端口上是否已经有同名 server
+        if (port_to_names[port].count(name))
+        {
+            throw std::runtime_error(
+                "Duplicate server_name '" + name +
+                "' on port " + toString(port));
+        }
+
+        port_to_names[port].insert(name);
+    }
+}
 
 bool Server::load_config(const std::string &path)
 {
@@ -933,13 +973,15 @@ bool Server::load_config(const std::string &path)
         }
         _rt_servers.push_back(srv);
     }
+    if (_rt_servers.empty())
+        throw std::runtime_error("config: no server block found");
+    valide_server_names();
+
     if (_routing)
     {
         delete _routing;
         _routing = NULL;
     }
-    if (_rt_servers.empty())
-        throw std::runtime_error("config: no server block found");
 
     _routing = new Routing(_rt_servers);
 

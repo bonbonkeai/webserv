@@ -94,6 +94,8 @@ private:
     void handle_cgi_event(int fd, uint32_t ev);
     void finish_cgi_process(CGI_Process *proc);
     void cleanup_client_cgi(Client *c);
+    void valide_server_names();
+
     // void finalize_cgi_response(Client& c, int pipe_fd);
 };
 
