@@ -22,20 +22,12 @@ volatile sig_atomic_t Server::g_running = 1;
 // keep-alive policy
 // --------------------
 
-// static bool shouldCloseByStatus(int statusCode)
-// {
-//     if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 ||
-//         statusCode == 431 || statusCode == 414 || statusCode == 501 || statusCode == 500)
-//         return (true);
-//     return (false);
-// }
 static bool shouldCloseByStatus(int statusCode)
 {
-    if (statusCode == 400 || statusCode == 403 || statusCode == 408 ||
-        statusCode == 411 || statusCode == 413 || statusCode == 414 ||
-        statusCode == 431 || statusCode == 500 || statusCode == 501)
-        return true;
-    return false;
+    if (statusCode == 400 || statusCode == 411 || statusCode == 413 || statusCode == 408 ||
+        statusCode == 431 || statusCode == 414 || statusCode == 501 || statusCode == 500)
+        return (true);
+    return (false);
 }
 
 static bool computeKeepAlive(const HTTPRequest &req, int statusCode)
@@ -174,6 +166,7 @@ bool Server::init_sockets()
     std::set<int> ports;
     for (size_t i = 0; i < _rt_servers.size(); i++)
         ports.insert(_rt_servers[i].port);
+
     for (std::set<int>::iterator it = ports.begin(); it != ports.end(); ++it)
     {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -356,37 +349,6 @@ bool Server::do_read(Client &c)
                 c.write_pos = 0;
                 return (true);
             }
-            // headers 已经结束，parser 正在等 body 时，先 resolve config 再检查 Content-Length
-            const HTTPRequest& parsed = c.parser.getRequest();
-            if (ok &&
-                c.parser.isWaitingBody() &&
-                !parsed.has_effective)
-            {
-                HTTPRequest tmpReq = parsed;
-                if (_routing)
-                {
-                    tmpReq.effective = _routing->resolve(tmpReq, c.port, tmpReq._rout);
-                    tmpReq.max_body_size = tmpReq.effective.max_body_size;
-                    tmpReq.has_effective = true;
-                    // std::cerr << "[DBG] path=" << tmpReq.path
-                    //         << " cl=" << tmpReq.contentLength
-                    //         << " limit=" << tmpReq.max_body_size
-                    //         << " waitingBody=" << c.parser.isWaitingBody()
-                    //         << std::endl;
-                    if (tmpReq.has_content_length && tmpReq.contentLength > tmpReq.max_body_size)
-                    {
-                        // std::cerr << "[DBG] early 413 triggered" << std::endl;
-                        HTTPResponse err = buildErrorResponse(413);
-                        bool ka = computeKeepAlive(tmpReq, 413);
-                        c.is_keep_alive = ka;
-                        applyConnectionHeader(err, ka);
-                        c.write_buffer = ResponseBuilder::build(err);
-                        c.write_pos = 0;
-                        c._state = WRITING;
-                        return (true);
-                    }
-                }
-            }
             continue;
         }
         if (n == 0)
@@ -470,13 +432,7 @@ void Server::check_timeout()
         Client *c = _manager->get_socket_client_by_fd(fd);
         if (!c)
             continue;
-        const HTTPRequest& req = c->parser.getRequest();
-        int code = 408;
-        // incomplete chunked body 超时，按坏请求处理
-        if (!req.complet && req.chunked)
-            code = 400;
-        HTTPResponse err = buildErrorResponse(code);
-        // HTTPResponse err = buildErrorResponse(408);
+        HTTPResponse err = buildErrorResponse(408);
         err.headers["connection"] = "close";
         if (err.headers.find("content-length") == err.headers.end())
             err.headers["content-length"] = toString(err.body.size());
@@ -564,10 +520,6 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     if (_routing)
     {
         req.effective = _routing->resolve(req, c.port, req._rout);
-        std::cerr << "[DBG] req.path=" << req.path
-          << " rout.action=" << req._rout.action
-          << " fs_path=" << req._rout.fs_path
-          << std::endl;
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
@@ -737,7 +689,7 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
 }
 
 void Server::finish_cgi_process(CGI_Process *proc)
-{ 
+{
     if (!_cgi_manager.is_known(proc))
         return;
     Client *c = proc->client;
@@ -762,7 +714,6 @@ void Server::finish_cgi_process(CGI_Process *proc)
     }
     if (!c)
     {
-        proc->terminate();
         _cgi_manager.remove_and_delete(proc);
         return;
     }
@@ -926,6 +877,31 @@ void Server::run()
 //     // Your codebase moved CGI handling to CGIRequestHandle.
 //     // This function is intentionally left as a no-op.
 // }
+void Server::valide_server_names()
+{
+    std::map<int, std::set<std::string> > port_to_names;
+
+    for (size_t i = 0; i < _rt_servers.size(); ++i)
+    {
+        const ServerRuntimeConfig &srv = _rt_servers[i];
+        int port = srv.port;
+        const std::string &name = srv.server_name;
+
+        // 空 server_name 是允许的（作为 default server）
+        if (name.empty())
+            continue;
+
+        // 检查这个端口上是否已经有同名 server
+        if (port_to_names[port].count(name))
+        {
+            throw std::runtime_error(
+                "Duplicate server_name '" + name +
+                "' on port " + toString(port));
+        }
+
+        port_to_names[port].insert(name);
+    }
+}
 
 bool Server::load_config(const std::string &path)
 {
@@ -945,13 +921,15 @@ bool Server::load_config(const std::string &path)
         }
         _rt_servers.push_back(srv);
     }
+    if (_rt_servers.empty())
+        throw std::runtime_error("config: no server block found");
+    valide_server_names();
+
     if (_routing)
     {
         delete _routing;
         _routing = NULL;
     }
-    if (_rt_servers.empty())
-        throw std::runtime_error("config: no server block found");
 
     _routing = new Routing(_rt_servers);
 
