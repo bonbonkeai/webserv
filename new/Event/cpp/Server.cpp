@@ -737,12 +737,24 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
 }
 
 void Server::finish_cgi_process(CGI_Process *proc)
-{
+{ 
+    if (!_cgi_manager.is_known(proc))
+        return;
     Client *c = proc->client;
     if (proc->_read_fd >= 0)
+    {
         _epoller->del_event(proc->_read_fd);
+        _cgi_manager.unregiste_fd(proc->_read_fd);
+        proc->_read_fd = -1;
+    }
     if (proc->_write_fd >= 0)
+    {
         _epoller->del_event(proc->_write_fd);
+        _cgi_manager.unregiste_fd(proc->_write_fd);
+        proc->_write_fd = -1;
+    }
+
+    proc->terminate();
     if (c)
     {
         c->_cgi = NULL;
