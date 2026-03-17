@@ -1,3 +1,4 @@
-./vscode/
+.vscode/
 
-./www/upload/
+www/upload/
+*.txt
