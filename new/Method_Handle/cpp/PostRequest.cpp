@@ -4,11 +4,18 @@
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include "HTTP/hpp/HTTPUtils.hpp"
 
+// static bool isUploadEndpoint(const std::string& path)
+// {
+//     return (path == "/upload" || path == "/upload/");
+// }
 static bool isUploadEndpoint(const std::string& path)
 {
-    return (path == "/upload" || path == "/upload/");
+    return (path == "/upload");
 }
-
+static bool isUploadEndpoint(const std::string& path)
+{
+    return (path == "/upload");
+}
 static std::string basenameUpload(const std::string& path)
 {
     // ps：/upload/<filename> 且 filename 不允许包含 '/'
@@ -86,7 +93,21 @@ HTTPResponse PostRequest::handleRawUploadFallback()
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
+    //
+    if (_req.body.empty())
+    {
+        HTTPResponse r = buildErrorResponse(400);
+        r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+        return (r);
+    }
 
+    if (_req.body.size() > _req.max_body_size)
+    {
+        HTTPResponse r = buildErrorResponse(413);
+        r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+        return (r);
+    }
+    //
     std::string fullPath = UPLOAD_DIR;
     if (!fullPath.empty() && fullPath[fullPath.size() - 1] != '/')
         fullPath += "/";

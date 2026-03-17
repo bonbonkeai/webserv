@@ -4,41 +4,6 @@
 #include "HTTP/hpp/HTTPUtils.hpp"
 #include <sstream>
 
-// bool UploadHandle::extractBoundary(const std::string& contentType, std::string& outBoundary)
-// {
-//     // ex: multipart/form-data; boundary=----WebKitFormBoundaryabc123
-//     // boundary 可能带引号 boundary="xxx"
-//     std::string ct = contentType;
-//     // 项目里已有 toLowerInPlace，但这里不能把整个 value lower 掉，因为 boundary 区分大小写
-//     // 所以只用 find("boundary=") 在原字符串上查两种情况：boundary= 与 Boundary= 通常不会出现大写，MVP 直接查小写
-//     std::string key = "boundary=";
-//     std::size_t pos = ct.find(key);
-//     if (pos == std::string::npos)
-//         return (false);
-//     std::string b = ct.substr(pos + key.size());
-//     ltrimSpaces(b);
-//     rtrimSpaces(b);
-//     if (!b.empty() && b[0] == '"')
-//     {
-//         // boundary="xxx"
-//         std::size_t end = b.find('"', 1);
-//         if (end == std::string::npos)
-//             return false;
-//         b = b.substr(1, end - 1);
-//     }
-//     else
-//     {
-//         // boundary=xxx; other=...
-//         std::size_t semi = b.find(';');
-//         if (semi != std::string::npos)
-//             b = b.substr(0, semi);
-//         rtrimSpaces(b);
-//     }
-//     if (b.empty())
-//         return (false);
-//     outBoundary = b;
-//     return (true);
-// }
 
 bool UploadHandle::extractBoundary(const std::string& contentType, std::string& outBoundary)
 {
@@ -105,21 +70,6 @@ bool UploadHandle::extractBoundary(const std::string& contentType, std::string& 
     return (true);
 }
 
-
-// static std::string getParamQuoted(const std::string& s, const std::string& key)
-// {
-//     // 在 Content-Disposition 一行里找 key="..."
-//     // 返回引号内内容，不存在则 ""
-//     std::string needle = key + "=\"";
-//     std::size_t p = s.find(needle);
-//     if (p == std::string::npos)
-//         return ("");
-//     p += needle.size();
-//     std::size_t end = s.find('"', p);
-//     if (end == std::string::npos)
-//         return ("");
-//     return (s.substr(p, end - p));
-// }
 
 static std::string getParam(const std::string& s, const std::string& key)
 {
@@ -295,6 +245,21 @@ std::size_t UploadHandle::findNextBoundaryLine(const std::string& body,
 
 bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& uploadDir, HTTPResponse& outResp)
 {
+    //
+    if (req.body.empty())
+    {
+        outResp = buildErrorResponse(400);
+        outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+        return (false);
+    }
+
+    if (req.body.size() > req.max_body_size)
+    {
+        outResp = buildErrorResponse(413);
+        outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
+        return (false);
+    }
+    //
     // 1) Content-Type / boundary
     if (!req.headers.count("content-type"))
     {

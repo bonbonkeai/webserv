@@ -384,27 +384,20 @@ static bool hasBareLFInPrefix(const std::string& s, std::size_t len)
 
 bool HTTPRequestParser::parseHeaders()
 {
-    //先临时给一个上限，后续接入 config 的 client_max_body_size
-    // const std::size_t MAX_BODY = 1024 * 1024 * 10;if (hasBareLF(_buffer))
-        //     return fail(400);
+    std::size_t header_end = _buffer.find("\r\n\r\n");
+    if (header_end == std::string::npos)
+    {
+        if (hasBareLF(_buffer))
+            return fail(400);
+        return true; // need more data
+    }
+    // 这里只检查 header，不碰 body
+    if (hasBareLFInPrefix(_buffer, header_end + 2))
+        return fail(400);
+    // 只拿 header 部分出来解析
+    std::string headers_block = _buffer.substr(0, header_end + 2);
     while (true)
     {
-        // if (hasBareLF(_buffer))
-        //     return fail(400);
-        std::size_t header_end = _buffer.find("\r\n\r\n");
-        if (header_end != std::string::npos)
-        {
-            // 只检查 header 区域，不碰 body
-            if (hasBareLFInPrefix(_buffer, header_end + 2))
-                return fail(400);
-        }
-        else
-        {
-            // 还没收全 header，此时 buffer 里理论上只有 header
-            if (hasBareLF(_buffer))
-                return fail(400);
-        }
-        
         std::size_t pos = _buffer.find("\r\n");
         if (pos == std::string::npos)
             return (true);
@@ -420,11 +413,19 @@ bool HTTPRequestParser::parseHeaders()
             if (_req.version == "HTTP/1.1")
             {
 				if (_req.headers.find("host") == _req.headers.end())
-					return (fail(400));
+				{	
+                    std::cerr << "[HDR FAIL] only host" << std::endl;
+                    return (fail(400));
+                }
             }
             //2)chunked 与 content-length 不能同时存在
+            // if (_req.chunked && _req.has_content_length)
+            //     return (fail(400));
             if (_req.chunked && _req.has_content_length)
-                return (fail(400));
+            {
+                std::cerr << "[HDR FAIL] both TE and CL present" << std::endl;
+                return fail(400);
+            }
             //两者都没有 -> 411 Length Required（POST 必须有长度信息（Content-Length 或 chunked），否则 411）
             if (_req.method == "POST")
             {
@@ -447,21 +448,10 @@ bool HTTPRequestParser::parseHeaders()
                 _chunk_waiting_size = true;
                 _chunk_expected_size = 0;
             }
-            // connection: close 覆写 keep-alive
-            // if (_req.headers.count("connection"))
-            // {
-            //     std::string conn = _req.headers["connection"];
-            //     toLowerInPlace(conn);
-            //     ltrimSpaces(conn);
-            //     rtrimSpaces(conn);
-            //     if (conn == "close")
-            //         _req.keep_alive = false;
-            // }
             if (_req.headers.count("connection"))
             {
                 std::string conn = _req.headers["connection"];
                 toLowerInPlace(conn);
-
                 bool seen_close = false;
                 std::stringstream ss(conn);
                 std::string tok;
@@ -475,7 +465,6 @@ bool HTTPRequestParser::parseHeaders()
                 if (seen_close)
                     _req.keep_alive = false;
             }
-
             _state = _req.has_body ? WAIT_BODY : PARSE_DONE;
             if (_state == PARSE_DONE)
                 _req.complet = true;
@@ -483,8 +472,13 @@ bool HTTPRequestParser::parseHeaders()
         }
         //parse header line
         std::size_t colon = line.find(':');
+        // if (colon == std::string::npos)
+        //     return (fail(400));
         if (colon == std::string::npos)
-            return (fail(400));
+        {
+            std::cerr << "[HDR FAIL] missing colon: " << line << std::endl;
+            return fail(400);
+        }
         std::string key = line.substr(0, colon);
         std::string val = line.substr(colon + 1);
         //key / val trim
@@ -493,18 +487,29 @@ bool HTTPRequestParser::parseHeaders()
         ltrimSpaces(val);
         rtrimSpaces(val);
         //4)header name 合法性
+        // if (!isValidHeaderName(key))
+        //     return (fail(400));
         if (!isValidHeaderName(key))
-            return (fail(400));
+        {
+            std::cerr << "[HDR FAIL] invalid header name: " << key << std::endl;
+            return fail(400);
+        }
         //5)Host 唯一性（重复 host -> 400）
         if (key == "host")
         {
             //
             if (val.empty())
+            {
+                std::cerr << "[HDR FAIL] empty host " << std::endl;
                 return (fail(400));
+            }
             //
             // 1) Host 头重复 -> 400
             if (_req.headers.count("host"))
+            {
+                std::cerr << "[HDR FAIL] multi host " << std::endl;
                 return (fail(400));
+            }
             // 2) absolute-form 情况下，Host 必须与 authority 一致（大小写不敏感）
             if (!_req.authority.empty())
             {
@@ -513,14 +518,20 @@ bool HTTPRequestParser::parseHeaders()
                 toLowerInPlace(host_hdr);
                 toLowerInPlace(authority);
                 if (host_hdr != authority)
+                {
+                    std::cerr << "[HDR FAIL] host not autority " << std::endl;
                     return (fail(400));
+                }
             }
         }
         //6)Content-Length 严格校验（纯数字、无溢出、唯一性）
         if (key == "content-length")
         {
             if (_req.has_content_length)
+            {
+                std::cerr << "[HDR FAIL] has_content_length"  << std::endl;
                 return (fail(400));
+            }
             std::size_t n = 0;
             // if (!parseContentLengthStrict(val, n, MAX_BODY))
             //     return (fail(400));
@@ -554,7 +565,10 @@ bool HTTPRequestParser::parseHeaders()
         if (key == "transfer-encoding")
         {
             if (_req.has_transfer_encoding)
+            {
+                std::cerr << "[HDR FAIL] has_transfer_encoding"  << std::endl;
                 return fail(400);
+            }
             _req.has_transfer_encoding = true;
             std::string te = val;
             toLowerInPlace(te);
@@ -566,14 +580,20 @@ bool HTTPRequestParser::parseHeaders()
                 ltrimSpaces(token);
                 rtrimSpaces(token);
                 if (token.empty())
+                {
+                    std::cerr << "[HDR FAIL] token empty"  << std::endl;
                     return fail(400);
+                }
             //     if (token == "chunked")
             //         found_chunked = true;
             // }
                 if (token == "chunked")
                 {
                     if (found_chunked)
+                    {
+                        std::cerr << "[HDR FAIL] multi chunked"  << std::endl;
                         return fail(400); // 重复 chunked 也直接拒绝
+                    }
                     found_chunked = true;
                 }
                 else
