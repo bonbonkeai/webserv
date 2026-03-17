@@ -242,14 +242,6 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
     cfg.is_cgi = (loc && loc->has_cgi);
     cfg.cgi_exec = (loc && loc->has_cgi) ? loc->cgi_exec : std::map<std::string, std::string>();
 
-    // upload_path
-    cfg.upload_path.clear();
-    if (loc && loc->has_upload_path)
-        cfg.upload_path = loc->upload_path;
-    else if (!server.upload_path.empty())
-        cfg.upload_path = server.upload_path;
-    cfg.has_upload_path = !cfg.upload_path.empty();
-
     cfg.has_return = (loc && loc->has_return);
     if (cfg.has_return)
     {
@@ -362,13 +354,57 @@ EffectiveConfig Routing::resolve(HTTPRequest &req, int listen_port, RouteResult 
         return cfg;
     }
 
-    if (cfg.autoindex)
-        rout.action = ACTION_AUTOINDEX;
-    else if (req.method == "POST" && !cfg.upload_path.empty())
+    // if (cfg.autoindex)
+    //     rout.action = ACTION_AUTOINDEX;
+    // else if (req.method == "POST" && loc && loc->has_upload_path)
+    //{
+    //     rout.action = ACTION_UPLOAD;
+    // }
+    // else
+    //     rout.action = ACTION_STATIC;
+
+    // upload_path
+    cfg.upload_path.clear();
+    cfg.upload_path = (loc && loc->has_upload_path) ? loc->upload_path : server.upload_path;
+    if (!cfg.upload_path.empty() && cfg.upload_path[cfg.upload_path.size() - 1] == '/')
+        cfg.upload_path.erase(cfg.upload_path.size() - 1); // 统一去掉末尾斜杠
+
+    if (!cfg.upload_path.empty() && (req.method == "POST" || req.method == "DELETE"))
     {
         rout.action = ACTION_UPLOAD;
+        std::string filename = "";
+        if (loc && req.path.size() > loc->path.size())
+        {
+            filename = req.path.substr(loc->path.size());
+            if (!filename.empty() && filename[0] == '/')
+                filename.erase(0, 1);
+        }
+
+        if (!filename.empty())
+        {
+            // 情况 A: URL 里直接带了文件名 (Raw POST)
+            rout.fs_path = cfg.upload_path + "/" + filename;
+        }
+        else
+        {
+            // 情况 B: URL 只是目录 (Multipart POST)，fs_path 指向目录
+            // PostRequest 内部需要解析 Body 里的 filename
+            rout.fs_path = cfg.upload_path;
+        }
+        return cfg; // 上传逻辑处理完直接返回
     }
-    else
-        rout.action = ACTION_STATIC;
+    if (req.method == "GET")
+    {
+        // 只有路径确实是目录时才触发 AUTOINDEX
+        // 这里简单判断：如果 fs_path 最终指向的是目录且配置允许
+        if (cfg.autoindex /* && is_directory(rout.fs_path) */)
+        {
+            rout.action = ACTION_AUTOINDEX;
+        }
+        else
+        {
+            rout.action = ACTION_STATIC;
+        }
+    }
     return cfg;
 }
