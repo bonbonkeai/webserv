@@ -131,10 +131,8 @@ success
 ***************
 
 2）Host 带端口（合法）
-printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\n\r\n' "$PORT" | nc -v $HOST $PORT | sed -n '1,30p'
-curl -v "http://$HOST:$PORT/www/upload/hello.txt" -H "Host: localhost:$PORT" --http1.1
 第一条，避免 408 干扰：
-printf 'GET upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\nConnection: close\r\n\r\n' "$PORT" | nc -v "$HOST" "$PORT" | sed -n '1,30p'
+printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\nConnection: close\r\n\r\n' "$PORT" | nc -v "$HOST" "$PORT" | sed -n '1,30p'
 第二条，试试看少一层 /www：
 printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: localhost:%s\r\nConnection: close\r\n\r\n' "$PORT" | nc -v "$HOST" "$PORT" | sed -n '1,30p'
 第三条，直接查文件：
@@ -147,8 +145,7 @@ Host with port accepted
 不是 400（应进入正常路由逻辑，可能 200/404，看 hello.txt 是否存在）
 不应因为 Host 含端口而判 bad_request
 ***************
-ATTENT
-200+408
+success
 ***************
 
 
@@ -229,8 +226,7 @@ absolute-form OK
 不应返回 400
 行为应当等价于请求 /path（例如返回 200/404，取决于服务器是否存在 /path 对应资源）
 ***************
-ATTENT
-200 + 408
+success
 ***************
 
 
@@ -638,16 +634,14 @@ printf 'POST /upload/chunk_hex.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encod
 | nc -v $HOST $PORT | sed -n '1,80p'
 期望：201，文件内容为 0123456789
 ***************
-ATTENTE
-201+408
+success
 ***************
 
 9）chunk extension（允许 5;ext=1 这种形式，支持）
 printf 'POST /upload/chunk_ext.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5;ext=1\r\nhello\r\n0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,80p'
 ***************
-ATTENTE
-201+408
+success
 ***************
 
 10）chunked 缺少结尾 0\r\n\r\n
@@ -660,8 +654,7 @@ success
 printf 'POST /upload/chunk_ok.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n' \
 | nc -v $HOST $PORT | sed -n '1,60p'
 ***************
-ATTENT
-201 + 408
+success
 ***************
 非法 chunk size（应该立刻 400，而不是等超时）:
 printf 'POST /upload/chunk_badsize.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZZ\r\nhello\r\n0\r\n\r\n' \
@@ -762,8 +755,7 @@ print(d)
 print("[OK]" if d==b"hello" else "[FAIL]")
 PY
 ***************
-ATTENT
-2011 + 408
+success
 ***************
 
 
@@ -928,8 +920,7 @@ print(repr(data))
 print("[OK]" if data==b"hello\r\nworld" else "[FAIL]")
 PY
 ***************
-ATTENT
-201+OK+408
+success
 ***************
 
 
@@ -951,8 +942,7 @@ print(repr(data))
 print("[OK]" if data==b"a\r\nbc\r\nd" else "[FAIL]")
 PY
 ***************
-ATTENT
-201+OK+408
+success
 ***************
 
 
@@ -981,8 +971,7 @@ expected=b"5\r\nhello\r\n0\r\n\r\n"
 print("[OK]" if data==expected else "[FAIL]")
 PY
 ***************
-ATTENT
-201+OK+408
+success
 ***************
 
 

@@ -450,6 +450,7 @@ void Server::check_timeout()
         return;
     unsigned long long now = Client::now_ms();
     std::vector<int> timed_out;
+    std::vector<int> close_idle;
     std::map<int, Client *> &clients = _manager->get_all_socket_clients();
     for (std::map<int, Client *>::iterator it = clients.begin(); it != clients.end(); ++it)
     {
@@ -461,9 +462,21 @@ void Server::check_timeout()
             !c->parser.getRequest().complet &&
             c->is_timeout(now, ALL_TIMEOUT_MS))
         {
-            timed_out.push_back(it->first);
+        //     timed_out.push_back(it->first);
+              // 空闲 keep-alive，静默关闭
+            if (!c->parser.hasBufferedData())
+            {
+                close_idle.push_back(it->first);
+            }
+            else
+            {
+                // 真正读到一半超时，发 408/400
+                timed_out.push_back(it->first);
+            }
         }
     }
+    for (size_t i = 0; i < close_idle.size(); ++i)
+        close_client(close_idle[i]);
     for (size_t i = 0; i < timed_out.size(); ++i)
     {
         int fd = timed_out[i];
