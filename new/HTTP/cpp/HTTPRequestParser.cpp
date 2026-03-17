@@ -268,12 +268,20 @@ static bool hasBareLF(const std::string& s)
 
 bool	HTTPRequestParser::parseRequestLine()
 {
-    if (hasBareLF(_buffer))
-        return fail(400);
+    // if (hasBareLF(_buffer))
+    //     return fail(400);
     
-    size_t	pos = _buffer.find("\r\n");
-	if (pos == std::string::npos)
-		return (true);
+    // size_t	pos = _buffer.find("\r\n");
+	// if (pos == std::string::npos)
+	// 	return (true);
+    std::size_t pos = _buffer.find("\r\n");
+    if (pos == std::string::npos)
+    {
+        // 请求行还没收全时，只要当前 buffer 里出现裸 LF，就说明请求行本身非法
+        if (hasBareLF(_buffer))
+            return fail(400);
+        return true;
+    }
 	//non complet
 
 	std::string	line = _buffer.substr(0, pos);
@@ -361,14 +369,41 @@ bool	HTTPRequestParser::parseRequestLine()
 	return (true);
 }
 
+static bool hasBareLFInPrefix(const std::string& s, std::size_t len)
+{
+    for (std::size_t i = 0; i < len; ++i)
+    {
+        if (s[i] == '\n')
+        {
+            if (i == 0 || s[i - 1] != '\r')
+                return true;
+        }
+    }
+    return false;
+}
+
 bool HTTPRequestParser::parseHeaders()
 {
     //先临时给一个上限，后续接入 config 的 client_max_body_size
-    // const std::size_t MAX_BODY = 1024 * 1024 * 10;
+    // const std::size_t MAX_BODY = 1024 * 1024 * 10;if (hasBareLF(_buffer))
+        //     return fail(400);
     while (true)
     {
-        if (hasBareLF(_buffer))
-            return fail(400);
+        // if (hasBareLF(_buffer))
+        //     return fail(400);
+        std::size_t header_end = _buffer.find("\r\n\r\n");
+        if (header_end != std::string::npos)
+        {
+            // 只检查 header 区域，不碰 body
+            if (hasBareLFInPrefix(_buffer, header_end + 2))
+                return fail(400);
+        }
+        else
+        {
+            // 还没收全 header，此时 buffer 里理论上只有 header
+            if (hasBareLF(_buffer))
+                return fail(400);
+        }
         
         std::size_t pos = _buffer.find("\r\n");
         if (pos == std::string::npos)

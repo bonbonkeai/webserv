@@ -606,7 +606,6 @@ success
 7）chunked 正常上传（覆盖 chunked 拼接）
 printf 'POST /upload/chunk1.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n' \
 | nc 127.0.0.1 $PORT | sed -n '1,40p'
-test -f upload/chunk1.txt && echo "[OK] chunk1 exists" || echo "[FAIL] chunk1 missing"
 预期：
 	•	201
 	•	文件落盘
@@ -1475,3 +1474,13 @@ curl -v --path-as-is "http://127.0.0.1:8080/cgi-bin/nope.sh/aaa?x=1"
 ***************
 success
 ***************
+
+
+
+
+test_parser_cgi
+curl -i http://127.0.0.1:8080/cgi-bin/test.py
+curl -i -X POST --data-binary 'abc123' http://127.0.0.1:8080/cgi-bin/echo_body.sh
+curl -i -X POST -F "file=@test.txt" http://127.0.0.1:8080/cgi-bin/echo_body.sh
+curl -i -X POST --data-binary @big.txt http://127.0.0.1:8080/cgi-bin/test_big.sh
+printf 'POST /upload/chunk_badsize.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZZ\r\nhello\r\n0\r\n\r\n' | nc -v $HOST $PORT

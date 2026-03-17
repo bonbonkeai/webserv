@@ -469,8 +469,18 @@ bool Server::buildRespForCompletedReq(Client& c, int fd)
     // CGI
     if (req.is_cgi_request())
     {
+        std::cerr << "[CGI DBG] req.path      = " << req.path << std::endl;
+        std::cerr << "[CGI DBG] root          = " << req.effective.root << std::endl;
+        std::cerr << "[CGI DBG] script_name   = " << req._rout.script_name << std::endl;
+        std::cerr << "[CGI DBG] path_info     = " << req._rout.path_info << std::endl;
+        std::cerr << "[CGI DBG] fs_path       = " << req._rout.fs_path << std::endl;
+        std::cerr << "[CGI DBG] joined_path   = "
+                << FileUtils::joinPath(req.effective.root, req.path) << std::endl;
+
         c._cgi = new CGI_Process();
-        std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
+        // std::string scriptPath = FileUtils::joinPath(req.effective.root, req.path);
+        std::string scriptPath = req._rout.fs_path;
+        std::cerr << "[CGI DBG] execute path  = " << scriptPath << std::endl;
         c._cgi->execute(scriptPath, req);
         c.is_cgi = true;
         _epoller->add_event(c._cgi->_read_fd, EPOLLIN | EPOLLET);
