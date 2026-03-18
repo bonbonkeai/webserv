@@ -6,7 +6,7 @@
 #include "HTTP/hpp/ErrorResponse.hpp"
 #include "HTTP/hpp/HTTPUtils.hpp"
 
-GetRequest::GetRequest(const HTTPRequest& req) : _req(req) {}
+GetRequest::GetRequest(const HTTPRequest &req) : _req(req) {}
 GetRequest::~GetRequest() {}
 
 // HTTPResponse GetRequest::handle()
@@ -18,7 +18,7 @@ GetRequest::~GetRequest() {}
 //     std::string INDEX_NAME = "index.html";
 //     if (!_req.effective.index.empty())
 //         INDEX_NAME = _req.effective.index[0];
-    
+
 //     // 1) path 安全
 //     if (!FileUtils::isSafePath(_req.path))
 //     {
@@ -88,6 +88,25 @@ HTTPResponse GetRequest::handle()
     if (fullPath.empty())
         fullPath = FileUtils::joinPath(_req.effective.root, _req.path);
 
+    if (_req.path == "/" || _req.path.empty())
+    {
+        // 先尝试找 index.html
+        std::string indexPath = fullPath + "/index.html";
+        if (FileUtils::exists(indexPath) && !FileUtils::isDirectory(indexPath))
+        {
+            return StaticHandle::serveFile(_req, indexPath);
+        }
+
+        // 如果没有 index.html，返回一个简单的欢迎页面（而不是 403）
+        HTTPResponse resp;
+        resp.statusCode = 200;
+        resp.statusText = "OK";
+        resp.body = "<!DOCTYPE html><html><head><title>Welcome</title></head><body><h1>Welcome to WebServer</h1><p>Root directory</p></body></html>";
+        resp.headers["content-type"] = "text/html; charset=utf-8";
+        resp.headers["content-length"] = toString(resp.body.size());
+        resp.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+        return resp;
+    }
     if (FileUtils::isDirectory(fullPath))
     {
         std::string indexPath;
