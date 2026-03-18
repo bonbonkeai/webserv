@@ -4,7 +4,7 @@ set -u
 
 HOST="${HOST:-127.0.0.1}"
 PORTS=(${PORTS:-8080})
-SERVER_BIN="${SERVER_BIN:-./test_http}"
+SERVER_BIN="${SERVER_BIN:-./webserv}"
 SERVER_ARGS="${SERVER_ARGS:-}"
 HOST_HEADER="${HOST_HEADER:-example.local}"
 START_SERVER="${START_SERVER:-1}"
