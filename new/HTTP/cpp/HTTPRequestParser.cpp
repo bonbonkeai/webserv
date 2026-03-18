@@ -1,42 +1,42 @@
 #include "HTTP/hpp/HTTPRequestParser.hpp"
 
-HTTPRequestParser::HTTPRequestParser() : 
-                    _state(WAIT_REQUEST_LINE),
-                    _chunk_waiting_size(true),
-                    _chunk_expected_size(0)
-                    {}
-
-HTTPRequestParser::HTTPRequestParser(const HTTPRequestParser& copy) : 
-					_req(copy._req),
-					_state(copy._state),
-					_buffer(copy._buffer),
-                    _chunk_waiting_size(copy._chunk_waiting_size),
-                    _chunk_expected_size(copy._chunk_expected_size)
-					{}
-
-HTTPRequestParser& HTTPRequestParser::operator=(const HTTPRequestParser& copy)
+HTTPRequestParser::HTTPRequestParser() : _state(WAIT_REQUEST_LINE),
+                                         _chunk_waiting_size(true),
+                                         _chunk_expected_size(0)
 {
-	if (this != &copy)
-	{
-		_req = copy._req;
-		_state = copy._state;
-		_buffer = copy._buffer;
+}
+
+HTTPRequestParser::HTTPRequestParser(const HTTPRequestParser &copy) : _req(copy._req),
+                                                                      _state(copy._state),
+                                                                      _buffer(copy._buffer),
+                                                                      _chunk_waiting_size(copy._chunk_waiting_size),
+                                                                      _chunk_expected_size(copy._chunk_expected_size)
+{
+}
+
+HTTPRequestParser &HTTPRequestParser::operator=(const HTTPRequestParser &copy)
+{
+    if (this != &copy)
+    {
+        _req = copy._req;
+        _state = copy._state;
+        _buffer = copy._buffer;
         _chunk_expected_size = copy._chunk_expected_size;
         _chunk_waiting_size = copy._chunk_waiting_size;
-	}
-	return (*this);
+    }
+    return (*this);
 }
 
 HTTPRequestParser::~HTTPRequestParser() {}
 
-const HTTPRequest&	HTTPRequestParser::getRequest() const
+const HTTPRequest &HTTPRequestParser::getRequest() const
 {
-	return (_req);
+    return (_req);
 }
 
 void HTTPRequestParser::resetForNextRequest()
 {
-    //不清 _buffer，让 pipelined 的下一条请求留着继续解析
+    // 不清 _buffer，让 pipelined 的下一条请求留着继续解析
     _req = HTTPRequest();
     _state = WAIT_REQUEST_LINE;
     _chunk_waiting_size = true;
@@ -57,56 +57,55 @@ void HTTPRequestParser::reset()
     _chunk_expected_size = 0;
 }
 
-
-bool	HTTPRequestParser::dejaParse(const std::string &newData)
+bool HTTPRequestParser::dejaParse(const std::string &newData)
 {
-	const std::size_t MAX_HEADER_SIZE = 8192; // 后续接 config
-	_buffer += newData;
-	if (_state == WAIT_REQUEST_LINE || _state == WAIT_HEADERS)
+    const std::size_t MAX_HEADER_SIZE = 8192; // 后续接 config
+    _buffer += newData;
+    if (_state == WAIT_REQUEST_LINE || _state == WAIT_HEADERS)
     {
-        //header还没结束才限制，避免把body算进去
+        // header还没结束才限制，避免把body算进去
         if (_buffer.find("\r\n\r\n") == std::string::npos && _buffer.size() > MAX_HEADER_SIZE)
             return (fail(431));
     }
-	while (true)
-	{
-		ParseState before = _state;
-		std::size_t bufBefore = _buffer.size();
-		if (_state == WAIT_REQUEST_LINE)
-		{
-			if (!parseRequestLine())
-				return (false);
-		}
-		else if (_state == WAIT_HEADERS)
-		{
-			if (!parseHeaders())
-				return (false);
-		}
-		else if (_state == WAIT_BODY)
-		{
-			if (!parseBody())
-				return (false);
-		}
-		else if (_state == PARSE_DONE)
-			return (true);
-		if (_state == before && _buffer.size() == bufBefore)
+    while (true)
+    {
+        ParseState before = _state;
+        std::size_t bufBefore = _buffer.size();
+        if (_state == WAIT_REQUEST_LINE)
+        {
+            if (!parseRequestLine())
+                return (false);
+        }
+        else if (_state == WAIT_HEADERS)
+        {
+            if (!parseHeaders())
+                return (false);
+        }
+        else if (_state == WAIT_BODY)
+        {
+            if (!parseBody())
+                return (false);
+        }
+        else if (_state == PARSE_DONE)
             return (true);
-	}
+        if (_state == before && _buffer.size() == bufBefore)
+            return (true);
+    }
 }
 
-void	HTTPRequestParser::splitUri()
+void HTTPRequestParser::splitUri()
 {
-	size_t pos = _req.uri.find("?");
-	if (pos == std::string::npos)
-	{
-		_req.path = _req.uri;
-		_req.query = "";
-	}
-	else
-	{
-		_req.path = _req.uri.substr(0, pos);
-		_req.query = _req.uri.substr(pos + 1);
-	}
+    size_t pos = _req.uri.find("?");
+    if (pos == std::string::npos)
+    {
+        _req.path = _req.uri;
+        _req.query = "";
+    }
+    else
+    {
+        _req.path = _req.uri.substr(0, pos);
+        _req.query = _req.uri.substr(pos + 1);
+    }
 }
 
 static int hexValue(char c)
@@ -129,7 +128,7 @@ static bool isUnreservedChar(unsigned char c)
     return (c == '-' || c == '.' || c == '_' || c == '~');
 }
 
-bool HTTPRequestParser::percentDecodePath(std::string& path)
+bool HTTPRequestParser::percentDecodePath(std::string &path)
 {
     std::string out;
     for (std::size_t i = 0; i < path.size(); ++i)
@@ -162,7 +161,7 @@ bool HTTPRequestParser::percentDecodePath(std::string& path)
     return (true);
 }
 
-int HTTPRequestParser::normalizePathInPlace(std::string& path)
+int HTTPRequestParser::normalizePathInPlace(std::string &path)
 {
     std::vector<std::string> segments;
 
@@ -203,7 +202,7 @@ int HTTPRequestParser::normalizePathInPlace(std::string& path)
     return (0);
 }
 
-bool HTTPRequestParser::isValidHeaderName(const std::string& key)
+bool HTTPRequestParser::isValidHeaderName(const std::string &key)
 {
     if (key.empty())
         return (false);
@@ -216,7 +215,7 @@ bool HTTPRequestParser::isValidHeaderName(const std::string& key)
     return (true);
 }
 
-int HTTPRequestParser::parseContentLengthStrict(const std::string& v, std::size_t& out, std::size_t max_body)
+int HTTPRequestParser::parseContentLengthStrict(const std::string &v, std::size_t &out, std::size_t max_body)
 {
     if (v.empty())
         return (400);
@@ -243,11 +242,12 @@ bool HTTPRequestParser::fail(int code)
 {
     _req.bad_request = true;
     if (code > 0)
-		_req.error_code = code;
-	else
-		_req.error_code = 400;
+        _req.error_code = code;
+    else
+        _req.error_code = 400;
     _req.complet = true;
     _state = PARSE_DONE;
+    _req.keep_alive = false;
     // 防止 chunked 状态残留
     _chunk_waiting_size = true;
     _chunk_expected_size = 0;
@@ -259,7 +259,7 @@ bool HTTPRequestParser::isWaitingBody() const
     return (_state == WAIT_BODY);
 }
 
-static bool hasBareLF(const std::string& s)
+static bool hasBareLF(const std::string &s)
 {
     for (std::size_t i = 0; i < s.size(); ++i)
     {
@@ -272,46 +272,60 @@ static bool hasBareLF(const std::string& s)
     return false;
 }
 
-bool	HTTPRequestParser::parseRequestLine()
+bool HTTPRequestParser::parseRequestLine()
 {
     // if (hasBareLF(_buffer))
     //     return fail(400);
-    
+
     // size_t	pos = _buffer.find("\r\n");
-	// if (pos == std::string::npos)
-	// 	return (true);
+    // if (pos == std::string::npos)
+    // 	return (true);
     std::size_t pos = _buffer.find("\r\n");
     if (pos == std::string::npos)
     {
-        // 请求行还没收全时，只要当前 buffer 里出现裸 LF，就说明请求行本身非法
-        if (hasBareLF(_buffer))
-            return fail(400);
+        //// 请求行还没收全时，只要当前 buffer 里出现裸 LF，就说明请求行本身非法
+        //if (hasBareLF(_buffer))
+        //{
+        //    std::cout << "has bar lf in parserequest" << std::endl;
+        //    return fail(400);
+        //}
+        size_t  lf_pos = _buffer.find('\n');
+        if (lf_pos != std::string::npos)
+        {
+            if (lf_pos == 0 || _buffer[lf_pos - 1] != '\r')
+            {
+                std::cout << "lf only line, wait for more data" << std::endl;
+                if (_buffer.size() > 8192)
+                    return fail(400);
+                return true;
+            }
+        }
         return true;
     }
-	//non complet
+    // non complet
 
-	std::string	line = _buffer.substr(0, pos);
-	_buffer.erase(0, pos + 2);
-	std::istringstream iss(line);
-	iss >> _req.method >> _req.uri >> _req.version;
+    std::string line = _buffer.substr(0, pos);
+    _buffer.erase(0, pos + 2);
+    std::istringstream iss(line);
+    iss >> _req.method >> _req.uri >> _req.version;
 
     //
     std::string extra;
-    if (!iss  || (iss >> extra))
+    if (!iss || (iss >> extra))
         return fail(400);
     //
 
     static const std::size_t MAX_URI_LENGTH = 4096;
-	if (!isTokenUpperAlpha(_req.method))
-		return (fail(400));
-	if (_req.method.empty() || _req.uri.empty() || _req.version.empty())
-		return (fail(400));
+    if (!isTokenUpperAlpha(_req.method))
+        return (fail(400));
+    if (_req.method.empty() || _req.uri.empty() || _req.version.empty())
+        return (fail(400));
     if (_req.version != "HTTP/1.1")
-		return (fail(505));
-     if (_req.method != "GET" && _req.method != "POST" && _req.method != "DELETE")
+        return (fail(505));
+    if (_req.method != "GET" && _req.method != "POST" && _req.method != "DELETE")
         return (fail(405));
-	
-    //URI 长度
+
+    // URI 长度
     if (_req.uri.size() > MAX_URI_LENGTH)
         return (fail(414));
     // URI 字符集合法性
@@ -334,7 +348,7 @@ bool	HTTPRequestParser::parseRequestLine()
         if (colon != std::string::npos)
         {
             host = authority.substr(0, colon);
-             std::string port_str = authority.substr(colon + 1);
+            std::string port_str = authority.substr(colon + 1);
 
             int port_num = 0;
             if (!parsePort(port_str, port_num))
@@ -362,8 +376,8 @@ bool	HTTPRequestParser::parseRequestLine()
     // {
     //     return (fail(403));
     // }
-	_req.keep_alive = true;
-	splitUri();
+    _req.keep_alive = true;
+    splitUri();
     if (!percentDecodePath(_req.path))
         return fail(400);
     int norm = normalizePathInPlace(_req.path); // 0 ok, 403 out-of-root
@@ -371,11 +385,11 @@ bool	HTTPRequestParser::parseRequestLine()
         return fail(403);
     _chunk_waiting_size = true;
     _chunk_expected_size = 0;
-	_state = WAIT_HEADERS;
-	return (true);
+    _state = WAIT_HEADERS;
+    return (true);
 }
 
-static bool hasBareLFInPrefix(const std::string& s, std::size_t len)
+static bool hasBareLFInPrefix(const std::string &s, std::size_t len)
 {
     for (std::size_t i = 0; i < len; ++i)
     {
@@ -401,51 +415,52 @@ bool HTTPRequestParser::parseHeaders()
     if (hasBareLFInPrefix(_buffer, header_end + 2))
         return fail(400);
     // 只拿 header 部分出来解析
-    std::string headers_block = _buffer.substr(0, header_end + 2);
+    std::string headers_block = _buffer.substr(0, header_end + 4);
     while (true)
     {
         std::size_t pos = _buffer.find("\r\n");
         if (pos == std::string::npos)
             return (true);
-		//need more data
+        // need more data
 
         std::string line = _buffer.substr(0, pos);
         _buffer.erase(0, pos + 2);
 
-        //header结束：空行
+        std::cout << "line: " << line << std::endl;
+        // header结束：空行
         if (line.empty())
         {
-            //1)HTTP/1.1 必须有 Host
+            // 1)HTTP/1.1 必须有 Host
             if (_req.version == "HTTP/1.1")
             {
-				if (_req.headers.find("host") == _req.headers.end())
-				{	
-                    std::cerr << "[HDR FAIL] only host" << std::endl;
-                    return (fail(400));
+                if (_req.headers.find("host") == _req.headers.end())
+                {
+                    std::cerr << "[HDR FAIL] missing Host header" << std::endl;
+                    return fail(400);
                 }
             }
-            //2)chunked 与 content-length 不能同时存在
-            // if (_req.chunked && _req.has_content_length)
-            //     return (fail(400));
+            // 2)chunked 与 content-length 不能同时存在
+            //  if (_req.chunked && _req.has_content_length)
+            //      return (fail(400));
             if (_req.chunked && _req.has_content_length)
             {
                 std::cerr << "[HDR FAIL] both TE and CL present" << std::endl;
                 return fail(400);
             }
-            //两者都没有 -> 411 Length Required（POST 必须有长度信息（Content-Length 或 chunked），否则 411）
+            // 两者都没有 -> 411 Length Required（POST 必须有长度信息（Content-Length 或 chunked），否则 411）
             if (_req.method == "POST")
             {
                 if (!_req.chunked && !_req.has_content_length)
                     return (fail(411));
             }
-            //3)如果有 content-length（且没 chunked），决定 body
-			// if (_req.has_content_length && _req.contentLength > 0)
-			// 	_req.has_body = true;
-            // 决定 body
+            // 3)如果有 content-length（且没 chunked），决定 body
+            //  if (_req.has_content_length && _req.contentLength > 0)
+            //  	_req.has_body = true;
+            //  决定 body
             if (_req.chunked)
                 _req.has_body = true;
             // else if (_req.has_content_length && _req.contentLength > 0)
-            else if (_req.has_content_length)//content-length=0也进入wait-body,由怕rseFixedBody（）统一读空body
+            else if (_req.has_content_length) // content-length=0也进入wait-body,由怕rseFixedBody（）统一读空body
                 _req.has_body = true;
             else
                 _req.has_body = false;
@@ -476,7 +491,7 @@ bool HTTPRequestParser::parseHeaders()
                 _req.complet = true;
             return (true);
         }
-        //parse header line
+        // parse header line
         std::size_t colon = line.find(':');
         // if (colon == std::string::npos)
         //     return (fail(400));
@@ -487,20 +502,20 @@ bool HTTPRequestParser::parseHeaders()
         }
         std::string key = line.substr(0, colon);
         std::string val = line.substr(colon + 1);
-        //key / val trim
+        // key / val trim
         rtrimSpaces(key);
         toLowerInPlace(key);
         ltrimSpaces(val);
         rtrimSpaces(val);
-        //4)header name 合法性
-        // if (!isValidHeaderName(key))
-        //     return (fail(400));
+        // 4)header name 合法性
+        //  if (!isValidHeaderName(key))
+        //      return (fail(400));
         if (!isValidHeaderName(key))
         {
             std::cerr << "[HDR FAIL] invalid header name: " << key << std::endl;
             return fail(400);
         }
-        //5)Host 唯一性（重复 host -> 400）
+        // 5)Host 唯一性（重复 host -> 400）
         if (key == "host")
         {
             //
@@ -530,12 +545,12 @@ bool HTTPRequestParser::parseHeaders()
                 }
             }
         }
-        //6)Content-Length 严格校验（纯数字、无溢出、唯一性）
+        // 6)Content-Length 严格校验（纯数字、无溢出、唯一性）
         if (key == "content-length")
         {
             if (_req.has_content_length)
             {
-                std::cerr << "[HDR FAIL] has_content_length"  << std::endl;
+                std::cerr << "[HDR FAIL] has_content_length" << std::endl;
                 return (fail(400));
             }
             std::size_t n = 0;
@@ -544,35 +559,35 @@ bool HTTPRequestParser::parseHeaders()
             int err = parseContentLengthStrict(val, n, _req.max_body_size);
             if (err != 0)
                 return (fail(err));
-			// MAX_BODY 返回 413, 先全部设置400；等接入 config 再细分
+            // MAX_BODY 返回 413, 先全部设置400；等接入 config 再细分
             _req.contentLength = n;
             _req.has_content_length = true;
             _req.headers[key] = val;
             continue;
         }
-        //7)Transfer-Encoding 只支持 chunked，且唯一性
-        // if (key == "transfer-encoding")
-        // {
-        //     if (_req.has_transfer_encoding)
-        //         return (fail(400));
-        //     _req.has_transfer_encoding = true;
-        //     std::string te = val;
-        //     toLowerInPlace(te);
-        //     ltrimSpaces(te);
-        //     rtrimSpaces(te);
-        //     // 只要包含 chunked 就认为 chunked
-        //     if (te == "chunked")
-        //         _req.chunked = true;
-        //     else
-        //         return fail(501);
-        //     _req.headers[key] = val;
-        //     continue;
-        // }
+        // 7)Transfer-Encoding 只支持 chunked，且唯一性
+        //  if (key == "transfer-encoding")
+        //  {
+        //      if (_req.has_transfer_encoding)
+        //          return (fail(400));
+        //      _req.has_transfer_encoding = true;
+        //      std::string te = val;
+        //      toLowerInPlace(te);
+        //      ltrimSpaces(te);
+        //      rtrimSpaces(te);
+        //      // 只要包含 chunked 就认为 chunked
+        //      if (te == "chunked")
+        //          _req.chunked = true;
+        //      else
+        //          return fail(501);
+        //      _req.headers[key] = val;
+        //      continue;
+        //  }
         if (key == "transfer-encoding")
         {
             if (_req.has_transfer_encoding)
             {
-                std::cerr << "[HDR FAIL] has_transfer_encoding"  << std::endl;
+                std::cerr << "[HDR FAIL] has_transfer_encoding" << std::endl;
                 return fail(400);
             }
             _req.has_transfer_encoding = true;
@@ -587,17 +602,17 @@ bool HTTPRequestParser::parseHeaders()
                 rtrimSpaces(token);
                 if (token.empty())
                 {
-                    std::cerr << "[HDR FAIL] token empty"  << std::endl;
+                    std::cerr << "[HDR FAIL] token empty" << std::endl;
                     return fail(400);
                 }
-            //     if (token == "chunked")
-            //         found_chunked = true;
-            // }
+                //     if (token == "chunked")
+                //         found_chunked = true;
+                // }
                 if (token == "chunked")
                 {
                     if (found_chunked)
                     {
-                        std::cerr << "[HDR FAIL] multi chunked"  << std::endl;
+                        std::cerr << "[HDR FAIL] multi chunked" << std::endl;
                         return fail(400); // 重复 chunked 也直接拒绝
                     }
                     found_chunked = true;
@@ -614,10 +629,10 @@ bool HTTPRequestParser::parseHeaders()
             _req.headers[key] = val;
             continue;
         }
-        //默认：保存 header
+        // 默认：保存 header
         _req.headers[key] = val;
     }
-	return (true);
+    return (true);
 }
 
 // bool HTTPRequestParser::parseBody()
@@ -660,7 +675,7 @@ bool HTTPRequestParser::parseFixedBody()
     return (true);
 }
 
-static bool peekLineCRLF(const std::string& buf, std::string& outLine, std::size_t& lineTotalLen)
+static bool peekLineCRLF(const std::string &buf, std::string &outLine, std::size_t &lineTotalLen)
 {
     std::size_t pos = buf.find("\r\n");
     if (pos == std::string::npos)
@@ -670,7 +685,7 @@ static bool peekLineCRLF(const std::string& buf, std::string& outLine, std::size
     return (true);
 }
 
-static bool parseHexSize(const std::string& s, std::size_t& out)
+static bool parseHexSize(const std::string &s, std::size_t &out)
 {
     // 允许 chunk-size 后跟 ;extension，先截断
     std::string t = s;
@@ -684,9 +699,12 @@ static bool parseHexSize(const std::string& s, std::size_t& out)
     {
         char c = t[i];
         int v;
-        if (c >= '0' && c <= '9') v = c - '0';
-        else if (c >= 'a' && c <= 'f') v = 10 + (c - 'a');
-        else if (c >= 'A' && c <= 'F') v = 10 + (c - 'A');
+        if (c >= '0' && c <= '9')
+            v = c - '0';
+        else if (c >= 'a' && c <= 'f')
+            v = 10 + (c - 'a');
+        else if (c >= 'A' && c <= 'F')
+            v = 10 + (c - 'A');
         else
             return (false);
         // overflow guard
@@ -785,4 +803,3 @@ bool HTTPRequestParser::parseBody()
         return parseChunkedBody();
     return parseFixedBody();
 }
-
