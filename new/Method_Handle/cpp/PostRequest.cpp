@@ -8,14 +8,16 @@
 // {
 //     return (path == "/upload" || path == "/upload/");
 // }
-static bool isUploadEndpoint(const std::string& path)
+static bool isMultipartUploadEndpoint(const std::string& path)
 {
     return (path == "/upload");
 }
-static bool isUploadEndpoint(const std::string& path)
+
+static bool isUploadDirPath(const std::string& path)
 {
-    return (path == "/upload");
+    return (path == "/upload/");
 }
+
 static std::string basenameUpload(const std::string& path)
 {
     // ps：/upload/<filename> 且 filename 不允许包含 '/'
@@ -149,33 +151,86 @@ HTTPResponse PostRequest::handle()
         std::string main = FileUtils::mimeMainLower(ct);
         isMultipart = (main == "multipart/form-data");
     }
-    // const bool isMultipart = hasCT && ct.find("multipart/form-data") != std::string::npos;
-    // ---------- case 1：POST /upload ----------
-    if (isUploadEndpoint(_req.path))
+    // std::cerr << "[POST DBG] path=" << _req.path
+    //           << " hasCT=" << hasCT
+    //           << " ct=" << ct
+    //           << " isMultipart=" << isMultipart
+    //           << std::endl;
+    // // ---------- case 1：POST /upload ----------
+    // if (isUploadEndpoint(_req.path))
+    // {
+    //     // 只允许 multipart
+    //     if (!isMultipart)
+    //     {
+    //         HTTPResponse r = buildErrorResponse(415); // Unsupported Media Type
+    //         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+    //         return (r);
+    //     }
+    //     HTTPResponse resp;
+    //     // const std::string UPLOAD_DIR = "./www/upload";
+    //     // const std::string UPLOAD_DIR = FileUtils::joinPath(_req.effective.root, "upload");
+    //     const std::string UPLOAD_DIR = resolveUploadDir(_req);
+    //     if (UploadHandle::handleMultipart(_req, UPLOAD_DIR, resp))
+    //         return (resp);
+    //     return (resp); // 错误已填充
+    // }
+    // // ---------- case 2：multipart 但不是 /upload ----------
+    // if (isMultipart)
+    // {
+    //     HTTPResponse r = buildErrorResponse(415);
+    //     r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+    //     return (r);
+    // }
+    // // ---------- case 3：fallback raw upload (/upload/<filename>) ----------
+    // return handleRawUploadFallback();
+
+  
+   // ---------- case 1：POST /upload ----------
+    // 这是 multipart upload 的正式 endpoint
+    if (isMultipartUploadEndpoint(_req.path))
     {
-        // 只允许 multipart
         if (!isMultipart)
         {
-            HTTPResponse r = buildErrorResponse(415); // Unsupported Media Type
+            HTTPResponse r = buildErrorResponse(415);
             r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
-            return (r);
+            return r;
         }
+
         HTTPResponse resp;
-        // const std::string UPLOAD_DIR = "./www/upload";
-        // const std::string UPLOAD_DIR = FileUtils::joinPath(_req.effective.root, "upload");
         const std::string UPLOAD_DIR = resolveUploadDir(_req);
         if (UploadHandle::handleMultipart(_req, UPLOAD_DIR, resp))
-            return (resp);
-        return (resp); // 错误已填充
+            return resp;
+        return resp;
     }
-    // ---------- case 2：multipart 但不是 /upload ----------
+
+    // ---------- case 2：POST /upload/ ----------
+    // 缺少 filename 的目录路径
+    if (isUploadDirPath(_req.path))
+    {
+        if (isMultipart)
+        {
+            // 如果你们希望 /upload/ 也接受 multipart，这里可以复用 multipart handler
+            HTTPResponse resp;
+            const std::string UPLOAD_DIR = resolveUploadDir(_req);
+            if (UploadHandle::handleMultipart(_req, UPLOAD_DIR, resp))
+                return resp;
+            return resp;
+        }
+        // raw body 发到 /upload/，属于格式错误：没有 filename
+        HTTPResponse r = buildErrorResponse(400);
+        r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+        return r;
+    }
+
+    // ---------- case 3：multipart 但路径不是 /upload 或 /upload/ ----------
     if (isMultipart)
     {
         HTTPResponse r = buildErrorResponse(415);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
-        return (r);
+        return r;
     }
-    // ---------- case 3：fallback raw upload (/upload/<filename>) ----------
+
+    // ---------- case 4：fallback raw upload (/upload/<filename>) ----------
     return handleRawUploadFallback();
 }
 

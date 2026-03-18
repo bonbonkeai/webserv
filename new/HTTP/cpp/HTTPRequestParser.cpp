@@ -162,11 +162,50 @@ bool HTTPRequestParser::percentDecodePath(std::string& path)
     return (true);
 }
 
+// int HTTPRequestParser::normalizePathInPlace(std::string& path)
+// {
+//     std::vector<std::string> segments;
+//     std::size_t i = 0;
+
+//     while (i < path.size())
+//     {
+//         while (i < path.size() && path[i] == '/')
+//             ++i;
+
+//         std::size_t start = i;
+//         while (i < path.size() && path[i] != '/')
+//             ++i;
+
+//         std::string seg = path.substr(start, i - start);
+//         if (seg.empty() || seg == ".")
+//             continue;
+
+//         if (seg == "..")
+//             return (403);
+
+//         segments.push_back(seg);
+//     }
+
+//     path = "/";
+//     for (std::size_t j = 0; j < segments.size(); ++j)
+//     {
+//         if (j > 0)
+//             path += "/";
+//         path += segments[j];
+//     }
+
+//     return (0);
+// }
 int HTTPRequestParser::normalizePathInPlace(std::string& path)
 {
     std::vector<std::string> segments;
-    std::size_t i = 0;
 
+    // 记录原始路径是否显式以 '/' 结尾
+    bool had_trailing_slash = false;
+    if (path.size() > 1 && path[path.size() - 1] == '/')
+        had_trailing_slash = true;
+
+    std::size_t i = 0;
     while (i < path.size())
     {
         while (i < path.size() && path[i] == '/')
@@ -179,13 +218,11 @@ int HTTPRequestParser::normalizePathInPlace(std::string& path)
         std::string seg = path.substr(start, i - start);
         if (seg.empty() || seg == ".")
             continue;
-
         if (seg == "..")
             return (403);
 
         segments.push_back(seg);
     }
-
     path = "/";
     for (std::size_t j = 0; j < segments.size(); ++j)
     {
@@ -193,6 +230,9 @@ int HTTPRequestParser::normalizePathInPlace(std::string& path)
             path += "/";
         path += segments[j];
     }
+    // 保留原始尾斜杠，但根路径 "/" 不额外追加
+    if (had_trailing_slash && path != "/")
+        path += "/";
 
     return (0);
 }

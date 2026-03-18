@@ -1335,8 +1335,15 @@ printf "POST / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n" | nc -v $HOST $
 success
 ***************
 
+missing_filename->400
+curl -i -X POST \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary "data" \
+  http://127.0.0.1:8080/upload/
 
-
+***************
+success
+***************
 
 
 4.3 DELETE
