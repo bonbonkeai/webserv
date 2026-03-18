@@ -121,6 +121,17 @@ printf 'GET /hello.txt HTTP/1.1\r\n\r\n' | nc 127.0.0.1 $PORT | sed -n '1,30p'
 预期：400
 ***************
 success
+
+GET /hello.txt HTTP/1.1
+
+
+fail missing Host rejected on 8080
+      expected HTTP/1.1 400
+---- nc output ----
+localhost [127.0.0.1] 8080 (http-alt) open
+cmd:
+GET /hello.txt HTTP/1.1
+Connection: close
 ***************
 
 更严格版本（避免“恰好 server 没读完就退出”）
@@ -189,11 +200,23 @@ success
 
 
 7）同一行多个 Host（逗号分隔）应当拒绝
-printf 'GET www/upload/hello.txt HTTP/1.1\r\nHost: a, b\r\n\r\n' \
-| nc -v $HOST $PORT | sed -n '1,30p'
+printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: a, b\r\n\r\n' \
+| nc -v 127.0.0.1 8080 | sed -n '1,30p'
 期望：400（更安全）
 ***************
-success
+failed
+
+fail comma-separated Host rejected on 8080
+      expected HTTP/1.1 400
+---- nc output ----
+localhost [127.0.0.1] 8080 (http-alt) open
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 6
+content-type: text/plain; charset=utf-8
+set-cookie: session_id=C887237667DE677E; Path=/; HttpOnly
+
+HELLO
 ***************
 
 
@@ -370,6 +393,20 @@ printf 'GET /upload/hello.txt HTTP/1.1\r\nHost: example.local\r\nConnection: clo
 第二个请求明确 Connection: close，因此第二段响应后连接结束
 ***************
 success
+
+
+| nc -v 127.0.0.1 8080
+fail Connection: close, keep-alive allows second request on same connection (8080)
+      expected 2 HTTP responses, got 1
+---- nc output ----
+localhost [127.0.0.1] 8080 (http-alt) open
+HTTP/1.1 200 OK
+connection: close
+content-length: 6
+content-type: text/plain; charset=utf-8
+set-cookie: session_id=39440E3004818597; Path=/; HttpOnly
+
+HELLO
 ***************
 
 
@@ -842,6 +879,19 @@ PY
 期望：短时间内无响应（等待 CRLF），不应立即返回 400。
 ***************
 success
+
+==== 3.7.4 LF-only 短时间内不应立即响应 ====
+cmd: python3 incremental socket test on port 8080
+fail LF-only request does not get an immediate response on 8080
+      server responded too early or unexpectedly
+---- python output ----
+Server responded:
+HTTP/1.1 400 Bad Request
+connection: close
+content-length: 16
+content-type: text/plain; charset=utf-8
+
+400 Bad Request
 ***************
 
 
@@ -1138,7 +1188,7 @@ curl -i http://127.0.0.1:8080/dir/
 * DirectoryHandle::generateAutoIndexHtml
 * GetRequest 的目录分支
 ***************
-success
+failed
 ***************
 
 4）测试目录有 index.html
@@ -1174,6 +1224,10 @@ curl -is --http1.1 http://127.0.0.1:$PORT/emptydir/ | sed -n '1,30p'
 	•	connection: keep-alive 是否一致
 ***************
 success
+
+cmd: curl -is --http1.1 "http://127.0.0.1:8080/emptydir/" | sed -n '1,30p'
+fail matrix /emptydir/ -> 200 on 8080
+      got 403
 ***************
 
 6）GET 目录但不带尾斜杠 /dir, 是否重定向到 /dir/:

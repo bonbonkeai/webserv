@@ -17,11 +17,20 @@ HTTPResponse DeleteRequest::handle()
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
+    std::cerr << "[DELETE] _req.path = [" << _req.path << "]\n";
+    std::cerr << "[DELETE] effective.root = [" << _req.effective.root << "]\n";
+    std::cerr << "[DELETE] routed fs_path = [" << _req._rout.fs_path << "]\n";
 
     // std::string fullPath = FileUtils::joinPath(ROOT, _req.path);
-    std::string fullPath = _req._rout.fs_path;
+    // std::string fullPath = _req._rout.fs_path;
+    std::string fullPath;
+    if (FileUtils::startsWith(_req.path, "/upload/"))
+        fullPath = _req._rout.fs_path;
+    
     if (fullPath.empty())
         fullPath = FileUtils::joinPath(_req.effective.root, _req.path);
+    std::cerr << "[DELETE] final fullPath = [" << fullPath << "]\n";
+    std::cerr << "[DELETE] exists = [" << FileUtils::exists(fullPath) << "]\n";
     if (!FileUtils::exists(fullPath))
     {
         HTTPResponse r = buildErrorResponse(404);

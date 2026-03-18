@@ -2006,21 +2006,29 @@ test_get_range_ignored_or_supported() {
 
     section "4.1.7 GET Range 请求"
 
+    mkdir -p www/upload
+    printf "HELLO\n" > www/upload/hello.txt
+
     echo "cmd: curl -isS --http1.1 \"$base/upload/hello.txt\" -H \"Host: localhost\" -H \"Range: bytes=0-2\" | sed -n '1,30p'"
     local status
-    status="$(curl -sS -D /tmp/h_range.$$ "$base/upload/hello.txt" --http1.1 -H "Host: localhost" -H "Range: bytes=0-2" -o /tmp/b_range.$$ 2>/tmp/e_range.$$ -w '%{http_code}' || true)"
+    status="$(curl -sS -D /tmp/h_range.$$ "$base/upload/hello.txt" \
+        --http1.1 \
+        -H "Host: localhost" \
+        -H "Range: bytes=0-2" \
+        -o /tmp/b_range.$$ 2>/tmp/e_range.$$ -w '%{http_code}' || true)"
 
-    if [ "$status" = "206" ] || [ "$status" = "200" ] || [ "$status" = "404" ]; then
-        if [ "$status" = "206" ] || [ "$status" = "200" ]; then
-            print_ok "Range request handled acceptably on $port"
-        else
-            print_fail "Range request handled acceptably on $port" "got 404, expected file to exist for this test"
-            echo "note: this test assumes /upload/hello.txt exists on your server"
-        fi
+    if [ "$status" = "206" ]; then
+        print_ok "Range request returns 206 on $port"
+    elif [ "$status" = "200" ]; then
+        print_ok "Range request ignored and returned 200 on $port"
     else
         print_fail "Range request handled acceptably on $port" "expected 206 or 200, got $status"
         echo "---- headers ----"
         cat /tmp/h_range.$$ 2>/dev/null || true
+        echo "---- body ----"
+        cat /tmp/b_range.$$ 2>/dev/null || true
+        echo "---- curl stderr ----"
+        cat /tmp/e_range.$$ 2>/dev/null || true
     fi
 }
 
