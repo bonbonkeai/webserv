@@ -407,15 +407,20 @@ bool HTTPRequestParser::parseHeaders()
     std::size_t header_end = _buffer.find("\r\n\r\n");
     if (header_end == std::string::npos)
     {
-        if (hasBareLF(_buffer))
-            return fail(400);
-        return true; // need more data
+        // HTTP/1.1 可选没有任何其他 header，但仍需以空行结束（即当前 _buffer=="\r\n"）
+        if (!(_buffer == "\r\n"))
+        {
+            if (hasBareLF(_buffer))
+                return fail(400);
+            return true; // need more data
+        }
+        // 否则 _buffer == "\r\n"，此时可继续后面的循环解析空行结束
     }
     // 这里只检查 header，不碰 body
-    if (hasBareLFInPrefix(_buffer, header_end + 2))
+    if (header_end != std::string::npos && hasBareLFInPrefix(_buffer, header_end + 2))
         return fail(400);
     // 只拿 header 部分出来解析
-    std::string headers_block = _buffer.substr(0, header_end + 4);
+    std::string headers_block = _buffer.substr(0, header_end + 2);
     while (true)
     {
         std::size_t pos = _buffer.find("\r\n");
@@ -426,7 +431,6 @@ bool HTTPRequestParser::parseHeaders()
         std::string line = _buffer.substr(0, pos);
         _buffer.erase(0, pos + 2);
 
-        std::cout << "line: " << line << std::endl;
         // header结束：空行
         if (line.empty())
         {
