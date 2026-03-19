@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
-#include "Event/hpp/Server.hpp"
+#include "Event/hpp/new_Server.hpp"
 #include "Event/hpp/EpollManager.hpp"
 #include "Event/hpp/Client.hpp"
 
@@ -31,7 +31,7 @@
 #include <string>
 #include <stdexcept>
 #include <cstdlib> // atoi
-#include "Event/hpp/Server.hpp"
+#include "Event/hpp/new_Server.hpp"
 
 //int main(int ac, char **av)
 //{

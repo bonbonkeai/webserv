@@ -376,7 +376,7 @@ bool HTTPRequestParser::parseRequestLine()
     // {
     //     return (fail(403));
     // }
-    _req.keep_alive = true;
+    _req.keep_alive = (_req.version == "HTTP/1.1");
     splitUri();
     if (!percentDecodePath(_req.path))
         return fail(400);
@@ -477,7 +477,6 @@ bool HTTPRequestParser::parseHeaders()
             {
                 std::string conn = _req.headers["connection"];
                 toLowerInPlace(conn);
-                bool seen_close = false;
                 std::stringstream ss(conn);
                 std::string tok;
                 while (std::getline(ss, tok, ','))
@@ -485,10 +484,10 @@ bool HTTPRequestParser::parseHeaders()
                     ltrimSpaces(tok);
                     rtrimSpaces(tok);
                     if (tok == "close")
-                        seen_close = true;
+                        _req.keep_alive = false;
+                    else if (tok == "keep-alive")
+                        _req.keep_alive = true;
                 }
-                if (seen_close)
-                    _req.keep_alive = false;
             }
             _state = _req.has_body ? WAIT_BODY : PARSE_DONE;
             if (_state == PARSE_DONE)
@@ -526,6 +525,12 @@ bool HTTPRequestParser::parseHeaders()
             if (val.empty())
             {
                 std::cerr << "[HDR FAIL] empty host " << std::endl;
+                return (fail(400));
+            }
+            // Host 头值不能包含逗号（多个host）
+            if (val.find(',') != std::string::npos)
+            {
+                std::cerr << "[HDR FAIL] invalid host with comma " << std::endl;
                 return (fail(400));
             }
             //
