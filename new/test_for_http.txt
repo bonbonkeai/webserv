@@ -1534,3 +1534,137 @@ curl -i -X POST --data-binary 'abc123' http://127.0.0.1:8080/cgi-bin/echo_body.s
 curl -i -X POST -F "file=@test.txt" http://127.0.0.1:8080/cgi-bin/echo_body.sh
 curl -i -X POST --data-binary @big.txt http://127.0.0.1:8080/cgi-bin/test_big.sh
 printf 'POST /upload/chunk_badsize.txt HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\nZZ\r\nhello\r\n0\r\n\r\n' | nc -v $HOST $PORT
+
+
+
+//error_page
+1)测一下错误页静态文件本身能不能被访问到
+curl -i http://127.0.0.1:8080/html_error/404.html
+curl -i http://127.0.0.1:8080/html_error/style.css
+
+如果这里都拿不到，那后面 error_page 就算配置了也不会正常显示。
+
+2)404 Not Found
+curl -i http://127.0.0.1:8080/no-such-file
+状态码是不是 404 Not Found
+body 里是不是404.html 内容
+Content-Type 是否像 text/html
+如果错误页里有独特文字，比如
+<h1>404 Not Found</h1>
+<p>webserv custom error page</p>
+那 body 里应该能看到这段内容。
+
+3) 403 Forbidden
+这个需要造一个能稳定出 403 的场景。
+最简单是准备一个目录，没有 index，也不开 autoindex。
+比如先建目录
+mkdir -p ./www/forbidden_test
+不要往里面放 index.html。
+然后请求
+curl -i http://127.0.0.1:8080/forbidden_test/
+预期
+状态码 403 Forbidden
+body 是自定义的 403.html
+如果这里返回 404，说明路径映射没命中。
+如果返回目录列表，说明你这个目录被 autoindex 打开了。
+如果返回 200，说明它可能继承到了别的 root 或 index 逻辑，要回头查 location 匹配。
+
+4)405 Method Not Allowed
+配置里 / 和 /upload/ 允许 GET POST DELETE，所以不能随便拿它们来测 405。
+要找一个只该支持 GET 的资源，比如一个普通静态文件。
+试一下
+curl -i -X POST http://127.0.0.1:8080/hello.txt
+curl -i -X DELETE http://127.0.0.1:8080/hello.txt
+这里应该出 405。
+同时 body 应该是405.html。
+这一项非常关键，因为很多 webserv 项目其实会把这种请求做成 404 或 200，这就是逻辑错误。
+
+5)413 Payload Too Large
+配置里 /upload/ 限制是 500K，这很好测。
+先造一个超过 500K 的文件
+dd if=/dev/zero of=big.bin bs=1024 count=600
+再发请求
+curl -i -X POST --data-binary @big.bin http://127.0.0.1:8080/upload/big.bin
+或者如果upload 只接受 multipart，就测
+curl -i -F "file=@big.bin" http://127.0.0.1:8080/upload
+预期
+状态码 413
+body 是 413.html
+如果这里卡住或者连上传目录里真的出现了大文件，说明 body size 检查位置有问题。
+
+
+6)500 Internal Server Error
+最容易的方法是用一个会崩掉的 CGI，比如之前提到的 test_crash.sh。
+curl -i http://127.0.0.1:8080/cgi-bin/test_crash.sh
+预期
+状态码 500
+body 是 500.html
+测完后立刻再打一条正常请求
+curl -i http://127.0.0.1:8080/hello.txt
+这一步是为了确认 CGI 崩溃之后，服务器还能继续正常服务。
+如果 crash 之后整个 server 都不对了，说明清理逻辑有问题。
+
+7)504 Gateway Timeout
+如果给 CGI 做了 timeout，可以用 test_slow.sh。
+curl -i http://127.0.0.1:8080/cgi-bin/test_slow.sh
+预期
+超过你们设置的 CGI timeout 之后返回 504
+body 是 504.html
+然后同样，立刻再测一个正常请求
+curl -i http://127.0.0.1:8080/hello.txt
+如果 slow CGI 把后续请求都拖死，说明事件循环或 CGI 状态管理还有问题。
+
+
+8)400 Bad Request
+这个通常不能靠浏览器按钮测，要用 nc 或原始 socket 发畸形请求。
+最简单测法
+printf 'GET /hello.txt HTTP/1.1\r\n\r\n' | nc 127.0.0.1 8080
+要求 HTTP/1.1 必须有 Host 头，这里应该返回 400。
+
+
+9)408 Request Timeout
+nc 127.0.0.1 8080
+然后手动输入
+POST /upload HTTP/1.1
+Host: localhost
+Content-Length: 100
+故意不发完，不结束。
+等你们 server 的读取超时到了，看是否返回 408 或直接断开。
+
+
+10)411 Length Required
+这个是针对需要 body 但没给 Content-Length 的请求。
+比如
+printf 'POST /upload HTTP/1.1\r\nHost: localhost\r\n\r\nabc' | nc 127.0.0.1 8080
+要求 POST 必须有 Content-Length，这里应该能触发 411。
+
+
+11)415 Unsupported Media Type
+upload handler 对上传类型有限制，这个就能测。
+比如
+curl -i -F "file=@big.bin;type=application/octet-stream" http://127.0.0.1:8080/upload
+或者上传一个你们明确不接受的类型。
+如果你们其实没有类型校验，就不要期待它会稳定出 415。
+
+12)502 Bad Gateway
+这个通常更偏“反向代理/网关”语境。
+纯 CGI webserv 项目里，很多人根本不会真正用到 502。
+除非明确把某类 CGI 执行失败映射到 502，否则这页可能暂时测不到。
+
+13)505 HTTP Version Not Supported
+这个可以用原始报文测。
+printf 'GET / HTTP/9.9\r\nHost: localhost\r\n\r\n' | nc 127.0.0.1 8080
+版本检查，这里可能会返回 505。
+
+
+ps:怎么确认“真的用了自定义错误页”
+
+这一步非常重要。
+因为有时状态码对了，但 body 其实还是 fallback 文本，不是html。
+最稳的办法是，在每个错误页里加一小句独特标识，比如
+<p>webserv custom error page 404</p>
+然后用 curl grep
+curl -s http://127.0.0.1:8080/no-such-file | grep 'webserv custom error page 404'
+如果能 grep 到，就说明真的命中了写的文件。
+你甚至可以对每个页面都这样测。
+

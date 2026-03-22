@@ -161,9 +161,11 @@ HTTPResponse CGIRequestHandle::get_response() const
     if (succes)
         return HTTPResponse().buildResponseFromCGIOutput(_output_buffer, true);
     else if (_process && _process->is_timeout())
-        return buildErrorResponse(504);
+        // return buildErrorResponse(504);
+        return buildConfiguredErrorResponse(504, _req.effective);
     else
-        return buildErrorResponse(500);
+        // return buildErrorResponse(500);
+        return buildConfiguredErrorResponse(500, _req.effective);
 }
 int CGIRequestHandle::get_read_fd() const 
 {

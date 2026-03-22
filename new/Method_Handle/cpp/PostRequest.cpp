@@ -62,7 +62,8 @@ HTTPResponse PostRequest::handleRawUploadFallback()
 
     if (!FileUtils::isSafePath(_req.path))
     {
-        HTTPResponse r = buildErrorResponse(400);
+        // HTTPResponse r = buildErrorResponse(400);
+        HTTPResponse r = buildConfiguredErrorResponse(400, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
@@ -72,40 +73,35 @@ HTTPResponse PostRequest::handleRawUploadFallback()
     if (!FileUtils::startsWith(_req.path, prefix))
     {
         // POST 到非 upload 路径：404（或统一为 405）
-        HTTPResponse r = buildErrorResponse(404);
+        // HTTPResponse r = buildErrorResponse(404);
+        HTTPResponse r = buildConfiguredErrorResponse(404, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
-
-    // // POST 到 /upload/<file>
-    // std::string filename = basenameUpload(_req.path);
-    // if (filename.empty())
-    // {
-    //     HTTPResponse r = buildErrorResponse(403);
-    //     r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
-    //     return (r);
-    // }
 
     // 再做 /upload/<filename> 的 basename 校验
     std::string filename = basenameUpload(_req.path);
     if (filename.empty())
     {
         // /upload/ 但文件名不合法：更合理是 400（格式不对）
-        HTTPResponse r = buildErrorResponse(400);
+        // HTTPResponse r = buildErrorResponse(400);
+        HTTPResponse r = buildConfiguredErrorResponse(400, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
     //
     if (_req.body.empty())
     {
-        HTTPResponse r = buildErrorResponse(400);
+        // HTTPResponse r = buildErrorResponse(400);
+        HTTPResponse r = buildConfiguredErrorResponse(400, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
 
     if (_req.body.size() > _req.max_body_size)
     {
-        HTTPResponse r = buildErrorResponse(413);
+        // HTTPResponse r = buildErrorResponse(413);
+        HTTPResponse r = buildConfiguredErrorResponse(413, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
@@ -114,19 +110,14 @@ HTTPResponse PostRequest::handleRawUploadFallback()
     if (!fullPath.empty() && fullPath[fullPath.size() - 1] != '/')
         fullPath += "/";
     fullPath += filename;
-    // if (!FileUtils::writeAllBinary(fullPath, _req.body))
-    // {
-    //     HTTPResponse r = buildErrorResponse(500);
-    //     r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
-    //     return (r);
-    // }
     int e = 0;
     if (!FileUtils::writeAllBinaryErrno(fullPath, _req.body, e))
     {
         int code = 500;
         if (e == EACCES || e == EPERM)
             code = 403;
-        HTTPResponse r = buildErrorResponse(code);
+        // HTTPResponse r = buildErrorResponse(code);
+        HTTPResponse r = buildConfiguredErrorResponse(code, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
@@ -191,7 +182,8 @@ HTTPResponse PostRequest::handle()
     {
         if (!isMultipart)
         {
-            HTTPResponse r = buildErrorResponse(415);
+            // HTTPResponse r = buildErrorResponse(415);
+            HTTPResponse r = buildConfiguredErrorResponse(415, _req.effective);
             r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
             return r;
         }
@@ -217,7 +209,8 @@ HTTPResponse PostRequest::handle()
             return resp;
         }
         // raw body 发到 /upload/，属于格式错误：没有 filename
-        HTTPResponse r = buildErrorResponse(400);
+        // HTTPResponse r = buildErrorResponse(400);
+        HTTPResponse r = buildConfiguredErrorResponse(400, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return r;
     }
@@ -225,7 +218,8 @@ HTTPResponse PostRequest::handle()
     // ---------- case 3：multipart 但路径不是 /upload 或 /upload/ ----------
     if (isMultipart)
     {
-        HTTPResponse r = buildErrorResponse(415);
+        // HTTPResponse r = buildErrorResponse(415);
+        HTTPResponse r = buildConfiguredErrorResponse(415, _req.effective);
         r.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
         return r;
     }

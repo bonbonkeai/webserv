@@ -248,14 +248,16 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     //
     if (req.body.empty())
     {
-        outResp = buildErrorResponse(400);
+        // outResp = (400);
+        outResp = buildConfiguredErrorResponse(400, req.effective);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (false);
     }
 
     if (req.body.size() > req.max_body_size)
     {
-        outResp = buildErrorResponse(413);
+        // outResp = buildErrorResponse(413);
+        outResp = buildConfiguredErrorResponse(413, req.effective);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (false);
     }
@@ -263,7 +265,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     // 1) Content-Type / boundary
     if (!req.headers.count("content-type"))
     {
-        outResp = buildErrorResponse(400);
+        // outResp = buildErrorResponse(400);
+        outResp = buildConfiguredErrorResponse(400, req.effective);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (false);
     }
@@ -280,7 +283,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     //让大小写不敏感
     if (FileUtils::mimeMainLower(ct) != "multipart/form-data")
     {
-        outResp = buildErrorResponse(400);
+        // outResp = buildErrorResponse(400);
+        outResp = buildConfiguredErrorResponse(400, req.effective);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (false);
     }
@@ -289,7 +293,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     std::string boundary;
     if (!extractBoundary(ct, boundary))
     {
-        outResp = buildErrorResponse(400);
+        // outResp = buildErrorResponse(400);
+        outResp = buildConfiguredErrorResponse(400, req.effective);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (false);
     }
@@ -313,7 +318,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     {
         if (pos < 2 || body.compare(pos - 2, 2, "\r\n") != 0)
         {
-            outResp = buildErrorResponse(400);
+            // outResp = buildErrorResponse(400);
+            outResp = buildConfiguredErrorResponse(400, req.effective);
             outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
             return false;
         }
@@ -337,7 +343,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
         // boundary 后面必须是 \r\n
         if (pos + 2 > body.size() || body.compare(pos, 2, "\r\n") != 0)
         {
-            outResp = buildErrorResponse(400);
+            // outResp = buildErrorResponse(400);
+            outResp = buildConfiguredErrorResponse(400, req.effective);
             outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
             return (false);
         }
@@ -347,7 +354,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
         std::size_t headerEnd = body.find("\r\n\r\n", pos);
         if (headerEnd == std::string::npos)
         {
-            outResp = buildErrorResponse(400);
+            // outResp = buildErrorResponse(400);
+            outResp = buildConfiguredErrorResponse(400, req.effective);
             outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
             return (false);
         }
@@ -370,7 +378,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
         std::size_t next = findNextBoundaryLine(body, pos, delim, isFinalLine);
         if (next == std::string::npos)
         {
-            outResp = buildErrorResponse(400);
+            // outResp = buildErrorResponse(400);
+            outResp = buildConfiguredErrorResponse(400, req.effective);
             outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
             return (false);
         }
@@ -387,7 +396,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
             std::string safe = sanitizeFilename(filename);
             if (safe.empty())
             {
-                outResp = buildErrorResponse(403);
+                // outResp = buildErrorResponse(403);
+                outResp = buildConfiguredErrorResponse(403, req.effective);
                 outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
                 return (false);
             }
@@ -400,31 +410,28 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
             //jia ru
             if (uploadDir.empty())
             {
-                outResp = buildErrorResponse(500);
+                // outResp = buildErrorResponse(500);
+                outResp = buildConfiguredErrorResponse(500, req.effective);
                 outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
                 return (false);
             }
             //要求上传目录必须已经存在
             if (!FileUtils::exists(uploadDir) || !FileUtils::isDirectory(uploadDir))
             {
-                outResp = buildErrorResponse(500);
+                // outResp = buildErrorResponse(500);
+                outResp = buildConfiguredErrorResponse(500, req.effective);
                 outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
                 return (false);
             }
             // 写文件
-            // if (!FileUtils::writeAllBinary(path, partData))
-            // {
-            //     outResp = buildErrorResponse(500);
-            //     outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
-            //     return (false);
-            // }
             int e = 0;
             if (!FileUtils::writeAllBinaryErrno(path, partData, e))
             {
                 int code = 500;
                 if (e == EACCES || e == EPERM)
                     code = 403;
-                outResp = buildErrorResponse(code);
+                // outResp = buildErrorResponse(code);
+                outResp = buildConfiguredErrorResponse(code, req.effective);
                 outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
                 return (false);
             }
@@ -448,7 +455,8 @@ bool UploadHandle::handleMultipart(const HTTPRequest& req, const std::string& up
     if (!saved)
     {
         // 没找到 filename 字段
-        outResp = buildErrorResponse(400);
+        // outResp = buildErrorResponse(400);
+        outResp = buildConfiguredErrorResponse(400, req.effective);
         outResp.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (false);
     }

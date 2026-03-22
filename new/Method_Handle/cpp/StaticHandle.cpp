@@ -7,13 +7,15 @@ HTTPResponse StaticHandle::serveFile(const HTTPRequest& req, const std::string& 
 {
     if (!FileUtils::exists(fullPath))
     {
-        HTTPResponse r = buildErrorResponse(404);
+        // HTTPResponse r = buildErrorResponse(404);
+        HTTPResponse r = buildConfiguredErrorResponse(404, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
     if (FileUtils::isDirectory(fullPath))
     {
-        HTTPResponse r = buildErrorResponse(403);
+        // HTTPResponse r = buildErrorResponse(403);
+        HTTPResponse r = buildConfiguredErrorResponse(403, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
@@ -25,24 +27,18 @@ HTTPResponse StaticHandle::serveFile(const HTTPRequest& req, const std::string& 
     {
         // stat 都失败了：权限/IO/不存在（理论上 exists 已做过，这里仍防御一下）
         int code = (err == EACCES ? 403 : 500);
-        HTTPResponse r = buildErrorResponse(code);
+        // HTTPResponse r = buildErrorResponse(code);
+        HTTPResponse r = buildConfiguredErrorResponse(code, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
     if (sz > MAX_STATIC_FILE)
     {
-        HTTPResponse r = buildErrorResponse(413);
+        // HTTPResponse r = buildErrorResponse(413);
+        HTTPResponse r = buildConfiguredErrorResponse(413, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
-
-    // std::string content;
-    // if (!FileUtils::readAll(fullPath, content))
-    // {
-    //     HTTPResponse r = buildErrorResponse(500);
-    //     r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
-    //     return (r);
-    // }
     std::string content;
     err = 0;
     if (!FileUtils::readAll(fullPath, content, err))
@@ -52,7 +48,8 @@ HTTPResponse StaticHandle::serveFile(const HTTPRequest& req, const std::string& 
             code = 403;
         else
             code = 500;
-        HTTPResponse r = buildErrorResponse(code);
+        // HTTPResponse r = buildErrorResponse(code);
+        HTTPResponse r = buildConfiguredErrorResponse(code, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
     }

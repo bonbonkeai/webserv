@@ -348,7 +348,8 @@ bool Server::do_read(Client &c)
                 c._state = WRITING;
                 const HTTPRequest &req = c.parser.getRequest();
                 int code = (req.error_code > 0) ? req.error_code : 400;
-                HTTPResponse err = buildErrorResponse(code);
+                // HTTPResponse err = buildErrorResponse(code);
+                HTTPResponse err = buildConfiguredErrorResponse(code, req.effective);
                 bool ka = computeKeepAlive(req, code);
                 c.is_keep_alive = ka;
                 applyConnectionHeader(err, ka);
@@ -376,7 +377,8 @@ bool Server::do_read(Client &c)
                     if (tmpReq.has_content_length && tmpReq.contentLength > tmpReq.max_body_size)
                     {
                         // std::cerr << "[DBG] early 413 triggered" << std::endl;
-                        HTTPResponse err = buildErrorResponse(413);
+                        // HTTPResponse err = buildErrorResponse(413);
+                        HTTPResponse err = buildConfiguredErrorResponse(413, tmpReq.effective);
                         bool ka = computeKeepAlive(tmpReq, 413);
                         c.is_keep_alive = ka;
                         applyConnectionHeader(err, ka);
@@ -488,8 +490,8 @@ void Server::check_timeout()
         // incomplete chunked body 超时，按坏请求处理
         if (!req.complet && req.chunked)
             code = 400;
-        HTTPResponse err = buildErrorResponse(code);
-        // HTTPResponse err = buildErrorResponse(408);
+        // HTTPResponse err = buildErrorResponse(code);
+        HTTPResponse err = buildConfiguredErrorResponse(code, req.effective);
         err.headers["connection"] = "close";
         if (err.headers.find("content-length") == err.headers.end())
             err.headers["content-length"] = toString(err.body.size());
@@ -543,7 +545,8 @@ void Server::start_cgi_for_client(Client *c, const HTTPRequest &req)
     {
         int code = proc->_error_code;
         delete proc;
-        HTTPResponse err = buildErrorResponse(code);
+        // HTTPResponse err = buildErrorResponse(code);
+        HTTPResponse err = buildConfiguredErrorResponse(code, req.effective);
         err.headers["connection"] = "close";
         c->is_keep_alive = false;
         c->write_buffer = ResponseBuilder::build(err);
@@ -592,7 +595,8 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     // 405
     if (!isMethodAllowed(req.method, req.effective.allowed_methods))
     {
-        HTTPResponse err = buildErrorResponse(405);
+        // HTTPResponse err = buildErrorResponse(405);
+        HTTPResponse err = buildConfiguredErrorResponse(405, req.effective);
         bool ka = computeKeepAlive(req, 405);
         c.is_keep_alive = ka;
         applyConnectionHeader(err, ka);
@@ -605,7 +609,8 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     // 413 body size
     if (req.has_body && req.body.size() > req.effective.max_body_size)
     {
-        HTTPResponse err = buildErrorResponse(413);
+        // HTTPResponse err = buildErrorResponse(413);
+        HTTPResponse err = buildConfiguredErrorResponse(413, req.effective);
         bool ka = computeKeepAlive(req, 413);
         c.is_keep_alive = ka;
         applyConnectionHeader(err, ka);
@@ -624,7 +629,8 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     }
     if (req.effective.forbidden)
     {
-        HTTPResponse err = buildErrorResponse(403);
+        // HTTPResponse err = buildErrorResponse(403);
+        HTTPResponse err = buildConfiguredErrorResponse(403, req.effective);
         bool ka = computeKeepAlive(req, 403);
         c.is_keep_alive = ka;
         applyConnectionHeader(err, ka);
@@ -758,6 +764,7 @@ void Server::finish_cgi_process(CGI_Process *proc)
     if (!_cgi_manager.is_known(proc))
         return;
     Client *c = proc->client;
+    const HTTPRequest &req = c->parser.getRequest();
     if (proc->_read_fd >= 0)
     {
         _epoller->del_event(proc->_read_fd);
@@ -786,12 +793,14 @@ void Server::finish_cgi_process(CGI_Process *proc)
     if (proc->_state == CGI_Process::TIMEOUT)
     {
         proc->terminate();
-        resp = buildErrorResponse(504);
+        // resp = buildErrorResponse(504);
+        resp = buildConfiguredErrorResponse(504, req.effective);
     }
     else if (proc->_state == CGI_Process::ERROR)
     {
         proc->terminate();
-        resp = buildErrorResponse(500);
+        // resp = buildErrorResponse(500);
+        resp = buildConfiguredErrorResponse(500, req.effective);
     }
     else
         resp = resp.buildResponseFromCGIOutput(proc->_output_buffer, true);
@@ -828,7 +837,8 @@ void Server::run_process_keep_alive_pipeline(Client &c, int fd)
         {
             const HTTPRequest &rq = c.parser.getRequest();
             int code = rq.error_code > 0 ? rq.error_code : 400;
-            HTTPResponse err = buildErrorResponse(code);
+            // HTTPResponse err = buildErrorResponse(code);
+            HTTPResponse err = buildConfiguredErrorResponse(code, rq.effective);
             bool ka2 = computeKeepAlive(rq, code);
             c.is_keep_alive = ka2;
             applyConnectionHeader(err, ka2);

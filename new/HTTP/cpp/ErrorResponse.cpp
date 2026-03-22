@@ -1,5 +1,6 @@
 #include "HTTP/hpp/ErrorResponse.hpp"
 
+
 static std::string reasonPhrase(int code)
 {
     switch (code)
@@ -45,4 +46,78 @@ HTTPResponse buildErrorResponse(int statusCode)
     r.headers["connection"] = "close";
     AddAllowHeader(r);
     return (r);
+}
+//
+static bool readWholeFile(const std::string& path, std::string& out)
+{
+    std::ifstream ifs(path.c_str(), std::ios::in | std::ios::binary);
+    if (!ifs.is_open())
+        return false;
+    std::ostringstream ss;
+    ss << ifs.rdbuf();
+    if (!ifs.good() && !ifs.eof())
+        return false;
+    out = ss.str();
+    return true;
+}
+
+static std::string guessContentType(const std::string& path)
+{
+    std::size_t dot = path.rfind('.');
+    if (dot == std::string::npos)
+        return "text/plain; charset=utf-8";
+
+    std::string ext = path.substr(dot + 1);
+    for (std::size_t i = 0; i < ext.size(); ++i)
+        ext[i] = static_cast<char>(std::tolower(ext[i]));
+    if (ext == "html" || ext == "htm")
+        return "text/html; charset=utf-8";
+    if (ext == "css")
+        return "text/css; charset=utf-8";
+    if (ext == "txt")
+        return "text/plain; charset=utf-8";
+    return "application/octet-stream";
+}
+
+static bool uriToPathForErrorPage(const EffectiveConfig& cfg,
+                                  const std::string& uri,
+                                  std::string& outPath)
+{
+    if (cfg.root.empty() || uri.empty())
+        return false;
+    if (uri[0] != '/')
+        return false;
+    if (uri.find("..") != std::string::npos)
+        return false;
+    if (cfg.root[cfg.root.size() - 1] == '/')
+        outPath = cfg.root.substr(0, cfg.root.size() - 1) + uri;
+    else
+        outPath = cfg.root + uri;
+    return true;
+}
+
+HTTPResponse buildConfiguredErrorResponse(int statusCode, const EffectiveConfig& cfg)
+{
+    HTTPResponse fallback = buildErrorResponse(statusCode);
+    std::map<int, ErrorPageRule>::const_iterator it = cfg.error_pages.find(statusCode);
+    if (it == cfg.error_pages.end())
+        return fallback;
+    const ErrorPageRule& rule = it->second;
+    if (rule.uri.empty())
+        return fallback;
+    std::string filePath;
+    if (!uriToPathForErrorPage(cfg, rule.uri, filePath))
+        return fallback;
+    std::string fileBody;
+    if (!readWholeFile(filePath, fileBody))
+        return fallback;
+    HTTPResponse r;
+    r.statusCode = statusCode;
+    r.statusText = fallback.statusText;
+    r.body = fileBody;
+    r.headers["content-type"] = guessContentType(filePath);
+    r.headers["content-length"] = toString(r.body.size());
+    r.headers["connection"] = "close";
+    AddAllowHeader(r);
+    return r;
 }
