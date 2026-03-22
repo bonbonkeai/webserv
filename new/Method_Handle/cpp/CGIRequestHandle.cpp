@@ -2,7 +2,7 @@
 
 CGIRequestHandle::CGIRequestHandle(const HTTPRequest &req, EffectiveConfig& cfg) : _process(NULL), _req(req),
                                                                                 _config(cfg),
-                                                            completed(false), succes(false)
+                                                            completed(false), succes(false), _cgi_status(CGI_PENDING)
 {
 }
 
@@ -90,21 +90,45 @@ CGI_ENV CGI_ENV::get_env_from_request(const HTTPRequest &req, const EffectiveCon
     return env;
 }
 
-bool    CGIRequestHandle::start(CGIManager& manager, const EffectiveConfig &config, 
+// bool    CGIRequestHandle::start(CGIManager& manager, const EffectiveConfig &config, 
+//     const HTTPRequest &req, Client* c)
+// {
+//     _process = new CGI_Process();
+//     _manager = &manager;
+
+//     if (!_process->execute(config, req, c))
+//     {
+//         delete _process;
+//         _process = NULL;
+//         completed = true;
+//         succes = false;
+//         return false;
+//     }
+
+//     manager.add_process(_process);
+//     return true;
+// }
+bool CGIRequestHandle::start(CGIManager& manager, const EffectiveConfig &config,
     const HTTPRequest &req, Client* c)
 {
     _process = new CGI_Process();
     _manager = &manager;
-
+    if (!_process)
+    {
+        completed = true;
+        succes = false;
+        _cgi_status = CGI_INTERNAL_ERROR;
+        return false;
+    }
     if (!_process->execute(config, req, c))
     {
         delete _process;
         _process = NULL;
         completed = true;
         succes = false;
+        _cgi_status = CGI_INTERNAL_ERROR;
         return false;
     }
-
     manager.add_process(_process);
     return true;
 }
@@ -121,52 +145,140 @@ bool    CGIRequestHandle::start(CGIManager& manager, const EffectiveConfig &conf
     return events;
 }*/
 
-bool    CGIRequestHandle::handle_read()
-{
-    if (!_process || !_process->is_running())
-        return false;
+// bool    CGIRequestHandle::handle_read()
+// {
+//     if (!_process || !_process->is_running())
+//         return false;
     
-    std::string new_data;
-    bool    has_data = _process->read_output(new_data);
+//     std::string new_data;
+//     bool    has_data = _process->read_output(new_data);
 
+//     if (has_data)
+//         _output_buffer += new_data;
+//     if (!_process->is_running())
+//     {
+//         completed = true;
+//         succes = (_process->is_finished() && !_output_buffer.empty());
+//         return false;
+//     }
+//     return true;
+// }
+bool CGIRequestHandle::handle_read()
+{
+    if (!_process)
+        return false;
+    std::string new_data;
+    bool has_data = _process->read_output(new_data);
     if (has_data)
         _output_buffer += new_data;
+    if (_process->is_timeout())
+    {
+        completed = true;
+        succes = false;
+        _cgi_status = CGI_TIMEOUT;
+        return false;
+    }
     if (!_process->is_running())
     {
         completed = true;
-        succes = (_process->is_finished() && !_output_buffer.empty());
+        if (!_process->is_finished())
+        {
+            succes = false;
+            _cgi_status = CGI_INTERNAL_ERROR;
+            return false;
+        }
+        if (!_process->exited_normally())
+        {
+            succes = false;
+            _cgi_status = CGI_BAD_GATEWAY;
+            return false;
+        }
+        if (_process->exit_code() != 0)
+        {
+            succes = false;
+            _cgi_status = CGI_BAD_GATEWAY;
+            return false;
+        }
+        if (_output_buffer.empty())
+        {
+            succes = false;
+            _cgi_status = CGI_BAD_GATEWAY;
+            return false;
+        }
+        succes = true;
+        _cgi_status = CGI_OK;
         return false;
     }
     return true;
 }
 
-bool    CGIRequestHandle::handle_write()
+// bool    CGIRequestHandle::handle_write()
+// {
+//     if (!_process || !_process->is_running())
+//         return false;
+    
+//     bool    write_done = _process->write_body(_req.body);
+
+//     if (!_process->is_running())
+//     {
+//         completed = true;
+//         succes = false;
+//         return false;
+//     }
+//     return !write_done;
+// }
+bool CGIRequestHandle::handle_write()
 {
     if (!_process || !_process->is_running())
         return false;
-    
-    bool    write_done = _process->write_body(_req.body);
-
+    if (_process->is_timeout())
+    {
+        completed = true;
+        succes = false;
+        _cgi_status = CGI_TIMEOUT;
+        return false;
+    }
+    bool write_done = _process->write_body(_req.body);
+    if (_process->is_timeout())
+    {
+        completed = true;
+        succes = false;
+        _cgi_status = CGI_TIMEOUT;
+        return false;
+    }
     if (!_process->is_running())
     {
         completed = true;
         succes = false;
+        _cgi_status = CGI_INTERNAL_ERROR;
         return false;
     }
     return !write_done;
 }
 
+// HTTPResponse CGIRequestHandle::get_response() const
+// {
+//     if (succes)
+//         return HTTPResponse().buildResponseFromCGIOutput(_output_buffer, true);
+//     else if (_process && _process->is_timeout())
+//         // return buildErrorResponse(504);
+//         return buildConfiguredErrorResponse(504, _req.effective);
+//     else
+//         // return buildErrorResponse(500);
+//         return buildConfiguredErrorResponse(500, _req.effective);
+// }
+
 HTTPResponse CGIRequestHandle::get_response() const
 {
-    if (succes)
+    if (_cgi_status == CGI_OK)
         return HTTPResponse().buildResponseFromCGIOutput(_output_buffer, true);
-    else if (_process && _process->is_timeout())
-        // return buildErrorResponse(504);
+    if (_cgi_status == CGI_TIMEOUT)
         return buildConfiguredErrorResponse(504, _req.effective);
-    else
-        // return buildErrorResponse(500);
-        return buildConfiguredErrorResponse(500, _req.effective);
+    if (_cgi_status == CGI_BAD_GATEWAY)
+        return buildConfiguredErrorResponse(502, _req.effective);
+    return buildConfiguredErrorResponse(500, _req.effective);
 }
+
 int CGIRequestHandle::get_read_fd() const 
 {
     return _process ? _process->_read_fd : -1;

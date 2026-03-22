@@ -349,7 +349,8 @@ bool Server::do_read(Client &c)
                 const HTTPRequest &req = c.parser.getRequest();
                 int code = (req.error_code > 0) ? req.error_code : 400;
                 // HTTPResponse err = buildErrorResponse(code);
-                HTTPResponse err = buildConfiguredErrorResponse(code, req.effective);
+                // HTTPResponse err = buildConfiguredErrorResponse(code, req.effective);
+                HTTPResponse err = buildConfiguredErrorResponse(code, _default_cfg);
                 bool ka = computeKeepAlive(req, code);
                 c.is_keep_alive = ka;
                 applyConnectionHeader(err, ka);
@@ -491,7 +492,8 @@ void Server::check_timeout()
         if (!req.complet && req.chunked)
             code = 400;
         // HTTPResponse err = buildErrorResponse(code);
-        HTTPResponse err = buildConfiguredErrorResponse(code, req.effective);
+        // HTTPResponse err = buildConfiguredErrorResponse(code, req.effective);
+        HTTPResponse err = buildConfiguredErrorResponse(code, _default_cfg);
         err.headers["connection"] = "close";
         if (err.headers.find("content-length") == err.headers.end())
             err.headers["content-length"] = toString(err.body.size());
@@ -847,7 +849,8 @@ void Server::run_process_keep_alive_pipeline(Client &c, int fd)
             const HTTPRequest &rq = c.parser.getRequest();
             int code = rq.error_code > 0 ? rq.error_code : 400;
             // HTTPResponse err = buildErrorResponse(code);
-            HTTPResponse err = buildConfiguredErrorResponse(code, rq.effective);
+            // HTTPResponse err = buildConfiguredErrorResponse(code, rq.effective);
+            HTTPResponse err = buildConfiguredErrorResponse(code, _default_cfg);
             bool ka2 = computeKeepAlive(rq, code);
             c.is_keep_alive = ka2;
             applyConnectionHeader(err, ka2);

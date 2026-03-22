@@ -34,6 +34,16 @@ struct CGI_ENV
     static CGI_ENV get_env_from_request(const HTTPRequest &req, const EffectiveConfig &config);
 };
 
+enum CGIResultStatus
+{
+    CGI_PENDING,
+    CGI_OK,
+    CGI_TIMEOUT,
+    CGI_BAD_GATEWAY,
+    CGI_INTERNAL_ERROR
+};
+
+
 class CGIRequestHandle
 {
 private:
@@ -48,6 +58,7 @@ private:
     HTTPResponse _resp;
     bool    completed;
     bool    succes;
+    CGIResultStatus _cgi_status;
 
 public:
     CGIRequestHandle(const HTTPRequest &req, EffectiveConfig& cfg);
@@ -71,6 +82,7 @@ public:
     {
         return _process;
     }
+
 };
 
 #endif

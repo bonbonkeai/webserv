@@ -7,9 +7,24 @@
 #include <string.h> // 用于 strerror
 #define TRACE() std::cout << "[] " << __FILE__ << ":" << __LINE__ << std::endl;
 
-CGI_Process::CGI_Process() : _state(CREATE), _pid(-1), _read_fd(-1),
-                             _write_fd(-1), _error_code(500), has_output(false), write_pos(0),
-                             start_time_ms(0), last_output_ms(0), client(NULL)
+// CGI_Process::CGI_Process() : _state(CREATE), _pid(-1), _read_fd(-1),
+//                              _write_fd(-1), _error_code(500), has_output(false), write_pos(0),
+//                              start_time_ms(0), last_output_ms(0), client(NULL)
+// {
+// }
+CGI_Process::CGI_Process()
+    : _state(CREATE),
+      _pid(-1),
+      _read_fd(-1),
+      _write_fd(-1),
+      _error_code(500),
+      has_output(false),
+      write_pos(0),
+      start_time_ms(0),
+      last_output_ms(0),
+      client(NULL),
+      _has_wait_status(false),
+      _wait_status(0)
 {
 }
 

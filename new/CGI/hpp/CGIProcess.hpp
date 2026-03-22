@@ -88,7 +88,28 @@ public:
     }
     void set_non_block_fd(int fd);
 
-    
+    bool _has_wait_status;
+    int  _wait_status;
+    bool exited_normally() const
+    {
+        return _has_wait_status && WIFEXITED(_wait_status);
+    }
+    int exit_code() const
+    {
+        if (!_has_wait_status || !WIFEXITED(_wait_status))
+            return -1;
+        return WEXITSTATUS(_wait_status);
+    }
+    bool was_signaled() const
+    {
+        return _has_wait_status && WIFSIGNALED(_wait_status);
+    }
+    int term_signal() const
+    {
+        if (!_has_wait_status || !WIFSIGNALED(_wait_status))
+            return -1;
+        return WTERMSIG(_wait_status);
+    }
 
 };
 
