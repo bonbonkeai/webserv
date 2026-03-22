@@ -249,7 +249,7 @@ PY
 
 count_http_responses() {
     local text="$1"
-    echo "$text" | grep -c '^HTTP/1\.1 '
+    printf '%s' "$text" | grep -o 'HTTP/1\.1 [0-9][0-9][0-9]' | wc -l | tr -d '[:space:]'
 }
 
 clean_upload_file() {
@@ -1861,7 +1861,7 @@ test_get_directory_autoindex() {
     local port="$1"
     local base="http://$HOST:$port"
 
-    section "4.1.3 GET 目录无 index，autoindex"
+    section "4.1.3 GET 目录无 index"
 
     rm -f www/dir/index.html
 
@@ -1871,29 +1871,41 @@ test_get_directory_autoindex() {
 
     if [ "$status" = "200" ]; then
         print_ok "GET /dir/ without index returns 200 on $port"
+
+        local ct
+        ct="$(header_value_from_file /tmp/h_dir_auto.$$ "content-type")"
+        if printf '%s\n' "$ct" | grep -Eiq '^text/html'; then
+            print_ok "directory listing content-type is text/html on $port"
+        else
+            print_fail "directory listing content-type is text/html on $port" "got [$ct]"
+        fi
+
+        if grep -Eiq '<ul>|<li>|href=' /tmp/b_dir_auto.$$; then
+            print_ok "directory listing body looks like autoindex HTML on $port"
+        else
+            print_fail "directory listing body looks like autoindex HTML on $port" "body does not look like listing HTML"
+            echo "---- body ----"
+            cat /tmp/b_dir_auto.$$ 2>/dev/null || true
+        fi
+
+    elif [ "$status" = "403" ]; then
+        print_ok "GET /dir/ without index returns 403 on $port (directory listing disabled)"
+
+        local ct
+        ct="$(header_value_from_file /tmp/h_dir_auto.$$ "content-type")"
+        if printf '%s\n' "$ct" | grep -Eiq '^(text/plain|text/html)'; then
+            print_ok "403 directory response content-type is acceptable on $port"
+        else
+            print_fail "403 directory response content-type is acceptable on $port" "got [$ct]"
+        fi
+
     else
-        print_fail "GET /dir/ without index returns 200 on $port" "expected 200 got $status"
+        print_fail "GET /dir/ without index returns acceptable status on $port" "expected 200 or 403 got $status"
         echo "---- headers ----"
         cat /tmp/h_dir_auto.$$ 2>/dev/null || true
         echo "---- body ----"
         cat /tmp/b_dir_auto.$$ 2>/dev/null || true
         return
-    fi
-
-    local ct
-    ct="$(header_value_from_file /tmp/h_dir_auto.$$ "content-type")"
-    if printf '%s\n' "$ct" | grep -Eiq '^text/html'; then
-        print_ok "autoindex content-type is text/html on $port"
-    else
-        print_fail "autoindex content-type is text/html on $port" "got [$ct]"
-    fi
-
-    if grep -Eiq '<ul>|<li>|href=' /tmp/b_dir_auto.$$; then
-        print_ok "autoindex body looks like directory listing on $port"
-    else
-        print_fail "autoindex body looks like directory listing on $port" "body does not look like listing HTML"
-        echo "---- body ----"
-        cat /tmp/b_dir_auto.$$ 2>/dev/null || true
     fi
 }
 
@@ -1944,20 +1956,31 @@ test_get_basic_matrix() {
     section "4.1.5 GET 基础矩阵"
 
     local p status
-
-    for p in "/hello.txt" "/nope.txt" "/dir/" "/emptydir/"; do
+    for p in "/hello.txt" "/nope.txt" "/dir/"; do
         echo "cmd: curl -is --http1.1 \"$base$p\" | sed -n '1,30p'"
         status="$(curl -sS -D /tmp/h_matrix.$$ "$base$p" --http1.1 -o /tmp/b_matrix.$$ 2>/tmp/e_matrix.$$ -w '%{http_code}' || true)"
 
         case "$p" in
             "/hello.txt")
-                [ "$status" = "200" ] && print_ok "matrix $p -> 200 on $port" || print_fail "matrix $p -> 200 on $port" "got $status"
+                if [ "$status" = "200" ]; then
+                    print_ok "matrix $p -> 200 on $port"
+                else
+                    print_fail "matrix $p -> 200 on $port" "got $status"
+                fi
                 ;;
             "/nope.txt")
-                [ "$status" = "404" ] && print_ok "matrix $p -> 404 on $port" || print_fail "matrix $p -> 404 on $port" "got $status"
+                if [ "$status" = "404" ]; then
+                    print_ok "matrix $p -> 404 on $port"
+                else
+                    print_fail "matrix $p -> 404 on $port" "got $status"
+                fi
                 ;;
-            "/dir/"|"/emptydir/")
-                [ "$status" = "200" ] && print_ok "matrix $p -> 200 on $port" || print_fail "matrix $p -> 200 on $port" "got $status"
+            "/dir/")
+                if [ "$status" = "200" ] || [ "$status" = "403" ]; then
+                    print_ok "matrix $p returns acceptable status $status on $port"
+                else
+                    print_fail "matrix $p returns acceptable status on $port" "expected 200 or 403 got $status"
+                fi
                 ;;
         esac
 
@@ -1980,6 +2003,109 @@ test_get_basic_matrix() {
         fi
     done
 }
+test_directory_behavior_matrix() {
+    local port="$1"
+    local base="http://$HOST:$port"
+
+    section "4.1.x 目录请求三种行为矩阵"
+
+    mkdir -p www/emptydir
+    rm -f www/emptydir/index.html
+
+    mkdir -p www/upload
+    rm -f www/upload/index.html
+    printf "HELLO\n" > www/upload/hello.txt
+
+    # 1. 目录存在 + autoindex on -> 200
+    echo "cmd: curl -isS --http1.1 \"$base/upload/\" | sed -n '1,60p'"
+    local status_auto
+    status_auto="$(curl -sS -D /tmp/h_dir_auto_on.$$ "$base/upload/" --http1.1 -o /tmp/b_dir_auto_on.$$ 2>/tmp/e_dir_auto_on.$$ -w '%{http_code}' || true)"
+
+    if [ "$status_auto" = "200" ]; then
+        print_ok "directory exists with autoindex enabled returns 200 on $port"
+    else
+        print_fail "directory exists with autoindex enabled returns 200 on $port" "expected 200 got $status_auto"
+        echo "---- headers ----"
+        cat /tmp/h_dir_auto_on.$$ 2>/dev/null || true
+        echo "---- body ----"
+        cat /tmp/b_dir_auto_on.$$ 2>/dev/null || true
+    fi
+
+    if grep -iq '^content-length:' /tmp/h_dir_auto_on.$$ || grep -iq '^transfer-encoding:[[:space:]]*chunked' /tmp/h_dir_auto_on.$$; then
+        print_ok "autoindex-on directory response has framing header on $port"
+    else
+        print_fail "autoindex-on directory response has framing header on $port" "missing both Content-Length and Transfer-Encoding"
+    fi
+
+    if grep -iq '^content-type:' /tmp/h_dir_auto_on.$$; then
+        print_ok "autoindex-on directory response has Content-Type on $port"
+    else
+        print_fail "autoindex-on directory response has Content-Type on $port" "missing Content-Type"
+    fi
+
+    if grep -Eiq '<ul>|<li>|href=' /tmp/b_dir_auto_on.$$; then
+        print_ok "autoindex-on directory body looks like listing HTML on $port"
+    else
+        print_fail "autoindex-on directory body looks like listing HTML on $port" "body does not look like directory listing"
+        echo "---- body ----"
+        cat /tmp/b_dir_auto_on.$$ 2>/dev/null || true
+    fi
+
+    # 2. 目录存在 + no index + autoindex off -> 403
+    echo "cmd: curl -isS --http1.1 \"$base/emptydir/\" | sed -n '1,60p'"
+    local status_forbidden
+    status_forbidden="$(curl -sS -D /tmp/h_dir_forbid.$$ "$base/emptydir/" --http1.1 -o /tmp/b_dir_forbid.$$ 2>/tmp/e_dir_forbid.$$ -w '%{http_code}' || true)"
+
+    if [ "$status_forbidden" = "403" ]; then
+        print_ok "directory exists without autoindex returns 403 on $port"
+    else
+        print_fail "directory exists without autoindex returns 403 on $port" "expected 403 got $status_forbidden"
+        echo "---- headers ----"
+        cat /tmp/h_dir_forbid.$$ 2>/dev/null || true
+        echo "---- body ----"
+        cat /tmp/b_dir_forbid.$$ 2>/dev/null || true
+    fi
+
+    if grep -iq '^content-length:' /tmp/h_dir_forbid.$$ || grep -iq '^transfer-encoding:[[:space:]]*chunked' /tmp/h_dir_forbid.$$; then
+        print_ok "no-autoindex directory response has framing header on $port"
+    else
+        print_fail "no-autoindex directory response has framing header on $port" "missing both Content-Length and Transfer-Encoding"
+    fi
+
+    if grep -iq '^content-type:' /tmp/h_dir_forbid.$$; then
+        print_ok "no-autoindex directory response has Content-Type on $port"
+    else
+        print_fail "no-autoindex directory response has Content-Type on $port" "missing Content-Type"
+    fi
+
+    # 3. 目录不存在 -> 404
+    echo "cmd: curl -isS --http1.1 \"$base/no_such_dir__/\" | sed -n '1,60p'"
+    local status_missing
+    status_missing="$(curl -sS -D /tmp/h_dir_missing.$$ "$base/no_such_dir__/" --http1.1 -o /tmp/b_dir_missing.$$ 2>/tmp/e_dir_missing.$$ -w '%{http_code}' || true)"
+
+    if [ "$status_missing" = "404" ]; then
+        print_ok "nonexistent directory returns 404 on $port"
+    else
+        print_fail "nonexistent directory returns 404 on $port" "expected 404 got $status_missing"
+        echo "---- headers ----"
+        cat /tmp/h_dir_missing.$$ 2>/dev/null || true
+        echo "---- body ----"
+        cat /tmp/b_dir_missing.$$ 2>/dev/null || true
+    fi
+
+    if grep -iq '^content-length:' /tmp/h_dir_missing.$$ || grep -iq '^transfer-encoding:[[:space:]]*chunked' /tmp/h_dir_missing.$$; then
+        print_ok "missing directory response has framing header on $port"
+    else
+        print_fail "missing directory response has framing header on $port" "missing both Content-Length and Transfer-Encoding"
+    fi
+
+    if grep -iq '^content-type:' /tmp/h_dir_missing.$$; then
+        print_ok "missing directory response has Content-Type on $port"
+    else
+        print_fail "missing directory response has Content-Type on $port" "missing Content-Type"
+    fi
+}
+
 
 test_get_directory_without_trailing_slash() {
     local port="$1"
@@ -2701,6 +2827,7 @@ run_for_port() {
     test_get_directory_autoindex "$port"
     test_get_directory_index_file "$port"
     test_get_basic_matrix "$port"
+    test_directory_behavior_matrix "$port"
     test_get_directory_without_trailing_slash "$port"
     test_get_range_ignored_or_supported "$port"
 
