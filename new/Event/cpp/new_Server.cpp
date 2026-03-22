@@ -584,6 +584,13 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
                   << " rout.action=" << req._rout.action
                   << " fs_path=" << req._rout.fs_path
                   << std::endl;
+        std::cerr << "[DBG] effective.error_pages.size=" << req.effective.error_pages.size() << std::endl;
+        for (std::map<int, ErrorPageRule>::const_iterator it = req.effective.error_pages.begin();
+            it != req.effective.error_pages.end(); ++it)
+        {
+            std::cerr << "[DBG] eff code=" << it->first
+                    << " uri=" << it->second.uri << std::endl;
+        }
         req.max_body_size = req.effective.max_body_size;
         req.has_effective = true;
     }
@@ -668,6 +675,8 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
     c.write_pos = 0;
     c._state = WRITING;
     _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+
+
     return (true);
 }
 

@@ -389,19 +389,21 @@ prepare_http_method_get_fixtures() {
     section "4. HTTP_Method 测试准备"
 
     echo "cmd:"
-    echo 'rm -rf www'
-    echo 'mkdir -p www'
+    echo 'mkdir -p www www/upload www/dir www/emptydir www/cgi-bin www/html_error'
+    echo 'rm -f www/hello.txt'
+    echo 'rm -f www/dir/*'
+    echo 'rm -f www/emptydir/*'
     echo 'printf "HELLO\n" > www/hello.txt'
-    echo 'mkdir -p www/dir'
     echo 'touch www/dir/a.txt'
-    echo 'mkdir -p www/emptydir'
 
-    rm -rf www
-    mkdir -p www
+    mkdir -p www www/upload www/dir www/emptydir www/cgi-bin www/html_error
+
+    rm -f www/hello.txt
+    rm -f www/dir/*
+    rm -f www/emptydir/*
+
     printf "HELLO\n" > www/hello.txt
-    mkdir -p www/dir
     touch www/dir/a.txt
-    mkdir -p www/emptydir
 
     if [ -f "www/hello.txt" ] && [ -d "www/dir" ] && [ -d "www/emptydir" ]; then
         print_ok "HTTP GET fixtures prepared"
@@ -414,18 +416,20 @@ prepare_http_method_post_delete_fixtures() {
     section "4.2 / 4.3 POST & DELETE 测试准备"
 
     echo "cmd:"
-    echo 'rm -rf www upload'
-    echo 'mkdir -p www upload'
-    echo 'mkdir -p www/upload'
+    echo 'mkdir -p www www/upload www/dir www/cgi-bin www/html_error'
+    echo 'rm -f www/hello.txt'
+    echo 'rm -f www/dir/*'
+    echo 'rm -f www/upload/*'
     echo 'printf "HELLO\n" > www/hello.txt'
-    echo 'mkdir -p www/dir'
     echo 'touch www/dir/a.txt'
 
-    rm -rf www upload
-    mkdir -p www upload
-    mkdir -p www/upload
+    mkdir -p www www/upload www/dir www/cgi-bin www/html_error
+
+    rm -f www/hello.txt
+    rm -f www/dir/*
+    rm -f www/upload/*
+
     printf "HELLO\n" > www/hello.txt
-    mkdir -p www/dir
     touch www/dir/a.txt
 
     if [ -f "www/hello.txt" ] && [ -d "www/upload" ] && [ -d "www/dir" ]; then
@@ -480,6 +484,8 @@ prepare_global_fixtures() {
     mkdir -p www/upload
     mkdir -p www/dir
     mkdir -p www/emptydir
+    mkdir -p www/cgi-bin
+    mkdir -p www/html_error
 
     printf "HELLO\n" > www/hello.txt
     printf "HELLO\n" > www/upload/hello.txt
