@@ -631,25 +631,8 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
         return (true);
     }
-    // redirect
-    if (req._rout.action == ACTION_REDIRECT)
-    {
-        HTTPResponse resp = RedirectHandle::buildRedirect(
-            req,
-            req._rout.redirect_code,
-            req._rout.redirect_url
-        );
-        bool ka = computeKeepAlive(req, resp.statusCode);
-        c.is_keep_alive = ka;
-        applyConnectionHeader(resp, ka);
-        c.write_buffer = ResponseBuilder::build(resp);
-        c.write_pos = 0;
-        c._state = WRITING;
-        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
-        return true;
-    }
     //411
-     if (req.missing_length_for_post)
+     if (req.method == "POST" && !req.has_content_length && !req.chunked)
      {
          HTTPResponse err = buildConfiguredErrorResponse(411, req.effective);
          bool ka = computeKeepAlive(req, 411);
@@ -661,6 +644,25 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
          _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
          return true;
      }
+    // redirect
+    if (req._rout.action == ACTION_REDIRECT)
+    {
+        HTTPResponse resp = RedirectHandle::buildRedirect(
+            req,
+            req._rout.redirect_code,
+            req._rout.redirect_url
+        );
+        bool ka = computeKeepAlive(req, resp.statusCode);
+        if (req._rout.redirect_code >= 300 && req._rout.redirect_code < 400)
+            ka = false; // 对于 3xx 重定向响应，强制关闭连接（不跟随重定向）
+        c.is_keep_alive = ka;
+        applyConnectionHeader(resp, ka);
+        c.write_buffer = ResponseBuilder::build(resp);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return true;
+    }
     
     // 413 body size
     if (req.has_body && req.body.size() > req.effective.max_body_size)
@@ -677,21 +679,6 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         return true;
     }
 
-    
-    // //411
-    // if (req.missing_length_for_post)
-    // {
-    //     HTTPResponse err = buildConfiguredErrorResponse(411, req.effective);
-    //     bool ka = computeKeepAlive(req, 411);
-    //     c.is_keep_alive = ka;
-    //     applyConnectionHeader(err, ka);
-    //     c.write_buffer = ResponseBuilder::build(err);
-    //     c.write_pos = 0;
-    //     c._state = WRITING;
-    //     _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
-    //     return true;
-    // }
-    // //
     // CGI
     if (req._rout.action == ACTION_CGI)
     {
@@ -712,8 +699,6 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         return true;
     }
 
-   
-    //
     // normal
     HTTPResponse resp = process_request(req);
     // 读请求里的 cookie

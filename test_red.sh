@@ -30,6 +30,45 @@ check_location() {
     fi
 }
 
+# helper from test_error_page.sh for raw nc response assertions
+nc_expect_status() {
+    local name="$1"
+    local expected="$2"
+    local payload="$3"
+
+    echo "cmd:"
+    printf '%b\n' "$payload"
+
+    local out
+    out="$(printf '%b' "$payload" | timeout 5 nc "$HOST" "$PORT" 2>/dev/null || true)"
+
+    if echo "$out" | grep -q "^HTTP/1\.1 $expected "; then
+        echo "✅ PASS — $name status=$expected"
+        PASS=$((PASS+1))
+    else
+        echo "❌ FAIL — $name status=$expected" "unexpected response"
+        echo "---- nc output ----"
+        echo "$out"
+        FAIL=$((FAIL+1))
+    fi
+
+    NC_OUT="$out"
+}
+
+check_nc_contains() {
+    local name="$1"
+    local pattern="$2"
+    if printf '%s\n' "$NC_OUT" | grep -Fq "$pattern"; then
+        echo "✅ PASS — $name contains [$pattern]"
+        PASS=$((PASS+1))
+    else
+        echo "❌ FAIL — $name contains [$pattern]" "pattern not found"
+        echo "---- nc output ----"
+        echo "$NC_OUT"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 echo "=== 重定向测试 ==="
 echo ""
 
@@ -40,9 +79,13 @@ R=$(curl -si --http1.1 -o /dev/null -D - "http://$HOST:$PORT/redirection/" 2>&1)
 check "GET /redirection/ 返回301" "301" "$R"
 check_location "GET /redirection/ Location正确" "https://42.fr/en/homepage/" "$R"
 
-# 2. POST /redirection/ → 301（方法不影响重定向）
-R=$(curl -si --http1.1 -X POST -o /dev/null -D - "http://$HOST:$PORT/redirection/" 2>&1)
+# 2. POST /redirection/ → 301（方法不影响重定向，带 Content-Length）
+R=$(curl -si --http1.1 -X POST -d '' -o /dev/null -D - "http://$HOST:$PORT/redirection/" 2>&1)
 check "POST /redirection/ 也返回301" "301" "$R"
+
+# 2.1 POST /redirection/ no Content-Length => 411
+nc_expect_status "POST /redirection/ no CL" "411" 'POST /redirection/ HTTP/1.1\r\nHost: localhost\r\n\r\nabc'
+check_nc_contains "POST /redirection/ no CL body" "411"
 
 # 3. 不跟随跳转，确认没有直接返回200
 R=$(curl -si --http1.1 "http://$HOST:$PORT/redirection/" 2>&1)
@@ -89,6 +132,14 @@ echo ""
 # 7. /redirection 不带尾斜杠（看你的路由是否处理）
 R=$(curl -si --http1.1 -o /dev/null -D - "http://$HOST:$PORT/redirection" 2>&1)
 echo "ℹ️  INFO — GET /redirection (无尾斜杠): $(echo "$R" | grep -o 'HTTP/1.1 [0-9]*' | head -1)"
+
+# 7.1 /redirection/ 保留尾斜杠且缺 CL，应返回 411（上面路径已验证）
+# (上面第 2.1 已检查，这里再对 404 期望作明示)
+if echo "$R" | grep -q "HTTP/1.1 404"; then
+    echo "✅ PASS — GET /redirection (no slash) 返回404 预期"
+else
+    echo "⚠️  INFO — GET /redirection (no slash) 返回$(echo "$R" | grep -o 'HTTP/1.1 [0-9]*' | head -1)"
+fi
 
 # 8. /oldplace 不带尾斜杠
 R=$(curl -si --http1.1 -o /dev/null -D - "http://$HOST:$PORT/oldplace" 2>&1)

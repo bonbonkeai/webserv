@@ -455,8 +455,7 @@ bool HTTPRequestParser::parseHeaders()
             if (_req.method == "POST")
             {
                 if (!_req.chunked && !_req.has_content_length)
-                    _req.missing_length_for_post = true;
-                    //return (fail(411));
+                    return (fail(411));
             }
             // // POST 若没有长度信息，先记录，后面由 server 层决定是否返回 411
             // if (_req.method == "POST")

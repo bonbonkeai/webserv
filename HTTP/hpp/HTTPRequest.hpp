@@ -62,9 +62,6 @@ public:
         bool    keep_alive;
 
         bool    has_content_length;
-        //for 411
-        bool missing_length_for_post;
-
         int     error_code;
 
         bool    has_transfer_encoding;

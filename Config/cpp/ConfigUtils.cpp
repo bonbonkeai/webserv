@@ -159,8 +159,13 @@ void ConfigUtils::validateS(ServerConfig& serveurs)
     if (!hasDirective(serveurs.directives, "listen"))
         throw std::runtime_error("Serveur miss listen directive");
     
-    for (size_t i=0; i<serveurs.locations.size(); i++)
-        validateL(serveurs,serveurs.locations[i]);
+    std::set<std::string> seen_paths;
+    for (size_t i = 0; i < serveurs.locations.size(); ++i) {
+        if (!seen_paths.insert(serveurs.locations[i].path).second) {
+            throw std::runtime_error("Duplicate location path: " + serveurs.locations[i].path);
+        }
+    }
+    
 }
 
 

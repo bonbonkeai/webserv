@@ -13,7 +13,6 @@ HTTPRequest::HTTPRequest() : method(""),
 			bad_request(false),
 			keep_alive(false),
 			has_content_length(false),
-            missing_length_for_post(false),
 			error_code(200),
             has_transfer_encoding(false),
             chunked(false),
@@ -38,7 +37,6 @@ HTTPRequest::HTTPRequest(const HTTPRequest& copy)
       bad_request(copy.bad_request),
       keep_alive(copy.keep_alive),
 	  has_content_length(copy.has_content_length),
-      missing_length_for_post(copy.missing_length_for_post),
 	  error_code(copy.error_code),
       has_transfer_encoding(copy.has_transfer_encoding),
       chunked(copy.chunked),
@@ -67,7 +65,6 @@ HTTPRequest& HTTPRequest::operator=(const HTTPRequest& copy)
         bad_request = copy.bad_request;
         keep_alive = copy.keep_alive;
 		has_content_length = copy.has_content_length;
-        missing_length_for_post = copy.missing_length_for_post;
 		error_code = copy.error_code;
         has_transfer_encoding = copy.has_transfer_encoding;
         chunked = copy.chunked;
