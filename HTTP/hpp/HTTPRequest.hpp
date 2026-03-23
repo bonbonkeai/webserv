@@ -62,6 +62,8 @@ public:
         bool    keep_alive;
 
         bool    has_content_length;
+        //for 411
+        bool missing_length_for_post;
 
         int     error_code;
 
@@ -78,6 +80,8 @@ public:
 
         // route result
         RouteResult _rout;
+
+        
 };
 
 #endif

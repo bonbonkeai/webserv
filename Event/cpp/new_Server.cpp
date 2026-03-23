@@ -1,4 +1,5 @@
 #include "Event/hpp/new_Server.hpp"
+#include "Method_Handle/hpp/RedirectHandle.hpp"
 #include <arpa/inet.h>  // inet_ntop
 #include <netinet/in.h> // sockaddr_in
 #include <sys/socket.h>
@@ -64,6 +65,18 @@ static bool isMethodAllowed(const std::string &m, const std::vector<std::string>
 // Server lifecycle
 // --------------------
 
+// Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
+// {
+//     _epoller = new Epoller();
+//     _manager = new ClientManager();
+//     _session_cookie = new Session_manager();
+
+//     signal(SIGINT, signal_handler);
+//     signal(SIGTERM, signal_handler);
+//     // signal(SIGCHLD, SIG_DFL);
+//     signal(SIGCHLD, SIG_IGN);
+//     g_running = 1;
+// }
 Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
 {
     _epoller = new Epoller();
@@ -72,8 +85,7 @@ Server::Server(int port) : port_nbr(port), socketfd(-1), _routing(NULL)
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
-    // signal(SIGCHLD, SIG_DFL);
-    signal(SIGCHLD, SIG_IGN);
+    signal(SIGCHLD, SIG_DFL);
     g_running = 1;
 }
 
@@ -573,6 +585,9 @@ void Server::start_cgi_for_client(Client *c, const HTTPRequest &req)
     c->_cgi = proc;
     c->is_cgi = true;
     c->_state = CGI_RUNNING;
+
+    //
+    c->cgi_request = req;
 }
 
 bool Server::buildRespForCompletedReq(Client &c, int fd)
@@ -630,6 +645,37 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         return true;
     }
 
+    // redirect
+    if (req._rout.action == ACTION_REDIRECT)
+    {
+        HTTPResponse resp = RedirectHandle::buildRedirect(
+            req,
+            req._rout.redirect_code,
+            req._rout.redirect_url
+        );
+        bool ka = computeKeepAlive(req, resp.statusCode);
+        c.is_keep_alive = ka;
+        applyConnectionHeader(resp, ka);
+        c.write_buffer = ResponseBuilder::build(resp);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return true;
+    }
+    // //411
+    // if (req.missing_length_for_post)
+    // {
+    //     HTTPResponse err = buildConfiguredErrorResponse(411, req.effective);
+    //     bool ka = computeKeepAlive(req, 411);
+    //     c.is_keep_alive = ka;
+    //     applyConnectionHeader(err, ka);
+    //     c.write_buffer = ResponseBuilder::build(err);
+    //     c.write_pos = 0;
+    //     c._state = WRITING;
+    //     _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+    //     return true;
+    // }
+    // //
     // CGI
     if (req._rout.action == ACTION_CGI)
     {
@@ -649,6 +695,9 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
         return true;
     }
+
+   
+    //
     // normal
     HTTPResponse resp = process_request(req);
     // 读请求里的 cookie
@@ -770,12 +819,69 @@ void Server::handle_cgi_event(int fd, uint32_t ev)
     }
 }
 
+// void Server::finish_cgi_process(CGI_Process *proc)
+// {
+//     if (!_cgi_manager.is_known(proc))
+//         return;
+//     Client *c = proc->client;
+//     const HTTPRequest &req = c->parser.getRequest();
+//     if (proc->_read_fd >= 0)
+//     {
+//         _epoller->del_event(proc->_read_fd);
+//         _cgi_manager.unregiste_fd(proc->_read_fd);
+//         proc->_read_fd = -1;
+//     }
+//     if (proc->_write_fd >= 0)
+//     {
+//         _epoller->del_event(proc->_write_fd);
+//         _cgi_manager.unregiste_fd(proc->_write_fd);
+//         proc->_write_fd = -1;
+//     }
+
+//     proc->terminate();
+//     if (c)
+//     {
+//         c->_cgi = NULL;
+//         c->is_cgi = false;
+//     }
+//     if (!c)
+//     {
+//         _cgi_manager.remove_and_delete(proc);
+//         return;
+//     }
+//     HTTPResponse resp;
+//     if (proc->_state == CGI_Process::TIMEOUT)
+//     {
+//         proc->terminate();
+//         // resp = buildErrorResponse(504);
+//         resp = buildConfiguredErrorResponse(504, req.effective);
+//     }
+//     else if (proc->_state == CGI_Process::ERROR)
+//     {
+//         proc->terminate();
+//         // resp = buildErrorResponse(500);
+//         resp = buildConfiguredErrorResponse(500, req.effective);
+//     }
+//     else
+//         resp = resp.buildResponseFromCGIOutput(proc->_output_buffer, true);
+//     bool ka = computeKeepAlive(c->parser.getRequest(), resp.statusCode);
+//     c->is_keep_alive = ka;
+//     applyConnectionHeader(resp, ka);
+//     c->write_buffer = ResponseBuilder::build(resp);
+//     c->write_pos = 0;
+//     c->_state = WRITING;
+//     c->is_cgi = false;
+//     c->_cgi = NULL;
+//     _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
+//     _cgi_manager.remove_and_delete(proc); // 唯一 delete 发生处
+// }
 void Server::finish_cgi_process(CGI_Process *proc)
 {
     if (!_cgi_manager.is_known(proc))
         return;
+
     Client *c = proc->client;
-    const HTTPRequest &req = c->parser.getRequest();
+
     if (proc->_read_fd >= 0)
     {
         _epoller->del_event(proc->_read_fd);
@@ -789,33 +895,64 @@ void Server::finish_cgi_process(CGI_Process *proc)
         proc->_write_fd = -1;
     }
 
-    proc->terminate();
-    if (c)
-    {
-        c->_cgi = NULL;
-        c->is_cgi = false;
-    }
     if (!c)
     {
+        proc->terminate();
         _cgi_manager.remove_and_delete(proc);
         return;
     }
+
+    const HTTPRequest &req = c->cgi_request;
     HTTPResponse resp;
+
     if (proc->_state == CGI_Process::TIMEOUT)
     {
         proc->terminate();
-        // resp = buildErrorResponse(504);
         resp = buildConfiguredErrorResponse(504, req.effective);
     }
-    else if (proc->_state == CGI_Process::ERROR)
-    {
-        proc->terminate();
-        // resp = buildErrorResponse(500);
-        resp = buildConfiguredErrorResponse(500, req.effective);
-    }
     else
-        resp = resp.buildResponseFromCGIOutput(proc->_output_buffer, true);
-    bool ka = computeKeepAlive(c->parser.getRequest(), resp.statusCode);
+    {
+        if (proc->_pid > 0 && !proc->_has_wait_status)
+        {
+            int status = 0;
+            pid_t r = waitpid(proc->_pid, &status, WNOHANG);
+            if (r == proc->_pid)
+            {
+                proc->_has_wait_status = true;
+                proc->_wait_status = status;
+                proc->_pid = -1;
+            }
+            else if (r == 0)
+            {
+                // 正常读到 EOF 后，大多数 CGI 此时也应该快结束了
+                // 这里不立即 kill，先保留状态判断机会
+            }
+        }
+
+        if (proc->_state == CGI_Process::ERROR)
+        {
+            proc->terminate();
+            resp = buildConfiguredErrorResponse(500, req.effective);
+        }
+        else if (proc->was_signaled())
+        {
+            resp = buildConfiguredErrorResponse(502, req.effective);
+        }
+        else if (proc->exited_normally() && proc->exit_code() != 0)
+        {
+            resp = buildConfiguredErrorResponse(502, req.effective);
+        }
+        else
+        {
+            resp = resp.buildResponseFromCGIOutput(proc->_output_buffer, true);
+
+            if (resp.statusCode <= 0)
+                resp = buildConfiguredErrorResponse(502, req.effective);
+            else if (resp.statusCode >= 500 && resp.body.empty())
+                resp = buildConfiguredErrorResponse(resp.statusCode, req.effective);
+        }
+    }
+    bool ka = computeKeepAlive(req, resp.statusCode);
     c->is_keep_alive = ka;
     applyConnectionHeader(resp, ka);
     c->write_buffer = ResponseBuilder::build(resp);
@@ -823,8 +960,9 @@ void Server::finish_cgi_process(CGI_Process *proc)
     c->_state = WRITING;
     c->is_cgi = false;
     c->_cgi = NULL;
+    c->cgi_request = HTTPRequest();
     _epoller->modif_event(c->client_fd, EPOLLOUT | EPOLLET);
-    _cgi_manager.remove_and_delete(proc); // 唯一 delete 发生处
+    _cgi_manager.remove_and_delete(proc);
 }
 // --------------------
 // Run helpers

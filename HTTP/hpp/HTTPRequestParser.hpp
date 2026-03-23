@@ -66,6 +66,7 @@ public:
 		void	resetForNextRequest();
 		bool	hasBufferedData() const; 
 		bool isWaitingBody() const;
+		
 
 private:
 		HTTPRequest	_req;
@@ -90,6 +91,7 @@ private:
 
 		bool    percentDecodePath(std::string& path);
 		int     normalizePathInPlace(std::string& path);
+
 		
 
 };

@@ -59,12 +59,19 @@ HTTPResponse DeleteRequest::handle()
         return (r);
     }
 
+    // HTTPResponse resp;
+    // resp.statusCode = 200;
+    // resp.statusText = "OK";
+    // resp.body = "Deleted\n";
+    // resp.headers["content-type"] = "text/plain; charset=utf-8";
+    // resp.headers["content-length"] = toString(resp.body.size());
+    // resp.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
+    // return (resp);
     HTTPResponse resp;
-    resp.statusCode = 200;
-    resp.statusText = "OK";
-    resp.body = "Deleted\n";
-    resp.headers["content-type"] = "text/plain; charset=utf-8";
-    resp.headers["content-length"] = toString(resp.body.size());
+    resp.statusCode = 204;
+    resp.statusText = "No Content";
+    resp.body = "";
+    resp.headers["content-length"] = "0";
     resp.headers["connection"] = (_req.keep_alive ? "keep-alive" : "close");
-    return (resp);
+    return resp;
 }

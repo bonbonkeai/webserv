@@ -61,6 +61,9 @@ struct Client
     // CGIRequestHandle* cgi_handler;
     std::string remote_addr;
 
+    // 保存启动 CGI 时那份已 resolve 的 request
+    HTTPRequest cgi_request;
+    
     // timeout
     time_t last_active;
     unsigned long long last_activity_ms;

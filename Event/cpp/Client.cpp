@@ -13,6 +13,7 @@ void Client::reset()
     // parser.reset();
     parser.resetForNextRequest();
     is_cgi = false;
+    cgi_request = HTTPRequest();
     last_activity_ms = now_ms();
     // if (_cgi)
     // {

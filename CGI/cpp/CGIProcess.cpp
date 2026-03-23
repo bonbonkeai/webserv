@@ -253,14 +253,51 @@ bool CGI_Process::setup_parent_process(int pipe_in[2], int pipe_out[2], const HT
 //         _read_fd = -1;
 //     }
 // }
+// void CGI_Process::terminate()
+// {
+//     if (_pid > 0)
+//     {
+//         kill(_pid, SIGKILL);
+//         waitpid(_pid, NULL, WNOHANG);
+//         _pid = -1;
+//     }
+//     if (_read_fd >= 0)
+//     {
+//         close(_read_fd);
+//         _read_fd = -1;
+//     }
+//     if (_write_fd >= 0)
+//     {
+//         close(_write_fd);
+//         _write_fd = -1;
+//     }
+// }
 void CGI_Process::terminate()
 {
     if (_pid > 0)
     {
-        kill(_pid, SIGKILL);
-        waitpid(_pid, NULL, WNOHANG);
+        if (!_has_wait_status)
+        {
+            int status = 0;
+            pid_t r = waitpid(_pid, &status, WNOHANG);
+            if (r == _pid)
+            {
+                _has_wait_status = true;
+                _wait_status = status;
+            }
+            else if (r == 0)
+            {
+                kill(_pid, SIGKILL);
+                if (waitpid(_pid, &status, 0) == _pid)
+                {
+                    _has_wait_status = true;
+                    _wait_status = status;
+                }
+            }
+        }
         _pid = -1;
     }
+
     if (_read_fd >= 0)
     {
         close(_read_fd);
