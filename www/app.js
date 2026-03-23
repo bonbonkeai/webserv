@@ -1,64 +1,295 @@
-function showResult(method, url, status, statusText, headers, body, duration) {
-  document.getElementById('meta').textContent =
-    `${method} ${url}\nstatus: ${status} ${statusText}\ntime: ${duration} ms`;
+const metaEl = document.getElementById('meta');
+const headersEl = document.getElementById('headers');
+const bodyEl = document.getElementById('body');
+const previewEl = document.getElementById('preview');
 
-  let headerText = '';
-  headers.forEach((value, key) => {
-    headerText += `${key}: ${value}\n`;
-  });
-  document.getElementById('headers').textContent = headerText;
-  document.getElementById('body').textContent = body;
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
-async function sendRequest(method, url, options = {}) {
-  const start = performance.now();
+function clearPreview() {
+  previewEl.innerHTML = 'No preview yet.';
+}
+
+function renderPreview(contentType, text, url) {
+  previewEl.innerHTML = '';
+
+  if (!contentType) {
+    previewEl.innerHTML = `<p class="preview-note">No Content-Type returned.</p>`;
+    return;
+  }
+
+  if (contentType.includes('text/html')) {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-same-origin');
+    iframe.srcdoc = text;
+    previewEl.appendChild(iframe);
+    return;
+  }
+
+  if (contentType.startsWith('text/plain') || contentType.includes('application/json')) {
+    const pre = document.createElement('pre');
+    pre.textContent = text;
+    pre.style.margin = '0';
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.wordBreak = 'break-word';
+    previewEl.appendChild(pre);
+    return;
+  }
+
+  if (contentType.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = url + (url.includes('?') ? '&' : '?') + '_ts=' + Date.now();
+    img.alt = 'Image preview';
+    previewEl.appendChild(img);
+    return;
+  }
+
+  previewEl.innerHTML = `<p class="preview-note">Preview not available for Content-Type: <code>${escapeHtml(contentType)}</code></p>`;
+}
+
+async function sendRequest(method, path) {
+  metaEl.textContent = `Loading ${method} ${path} ...`;
+  headersEl.textContent = '';
+  bodyEl.textContent = '';
+  clearPreview();
+
   try {
-    const response = await fetch(url, {
-      method: method,
-      redirect: 'follow',
-      ...options
+    const response = await fetch(path, {
+      method,
+      redirect: 'follow'
     });
 
-    const duration = Math.round(performance.now() - start);
-    const body = await response.text();
-    showResult(method, url, response.status, response.statusText, response.headers, body, duration);
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+
+    metaEl.textContent = `${method} ${path} → ${response.status} ${response.statusText}`;
+
+    let headersText = '';
+    response.headers.forEach((value, key) => {
+      headersText += `${key}: ${value}\n`;
+    });
+    headersEl.textContent = headersText || '(no headers)';
+
+    bodyEl.textContent = text || '(empty body)';
+
+    renderPreview(contentType, text, path);
   } catch (err) {
-    document.getElementById('meta').textContent = `${method} ${url}\nrequest failed`;
-    document.getElementById('headers').textContent = '';
-    document.getElementById('body').textContent = String(err);
+    metaEl.textContent = `${method} ${path} → request failed`;
+    headersEl.textContent = '';
+    bodyEl.textContent = String(err);
+    previewEl.innerHTML = `<p class="preview-note">Request failed.</p>`;
   }
 }
 
-function sendPostText() {
-  const body = 'name=bonbon&project=webserv';
-  sendRequest('POST', '/cgi-bin/echo_body.sh', {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: body
-  });
+async function sendPostText() {
+  const path = '/cgi-bin/echo_body.sh';
+  const payload = 'hello=world&from=tester';
+
+  metaEl.textContent = `Loading POST ${path} ...`;
+  headersEl.textContent = '';
+  bodyEl.textContent = '';
+  clearPreview();
+
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: payload
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+
+    metaEl.textContent = `POST ${path} → ${response.status} ${response.statusText}`;
+
+    let headersText = '';
+    response.headers.forEach((value, key) => {
+      headersText += `${key}: ${value}\n`;
+    });
+    headersEl.textContent = headersText || '(no headers)';
+
+    bodyEl.textContent = text || '(empty body)';
+
+    renderPreview(contentType, text, path);
+  } catch (err) {
+    metaEl.textContent = `POST ${path} → request failed`;
+    headersEl.textContent = '';
+    bodyEl.textContent = String(err);
+    previewEl.innerHTML = `<p class="preview-note">Request failed.</p>`;
+  }
 }
 
 async function uploadFile() {
   const input = document.getElementById('fileInput');
-  if (!input.files.length) {
-    alert('Choose a file first');
+  if (!input.files || !input.files[0]) {
+    metaEl.textContent = 'Please choose a file first.';
     return;
   }
 
-  const form = new FormData();
-  form.append('file', input.files[0]);
+  const formData = new FormData();
+  formData.append('file', input.files[0]);
 
-  await sendRequest('POST', '/upload', {
-    body: form
-  });
+  metaEl.textContent = `Uploading ${input.files[0].name} ...`;
+  headersEl.textContent = '';
+  bodyEl.textContent = '';
+  clearPreview();
+
+  try {
+    const response = await fetch('/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+
+    metaEl.textContent = `POST /upload → ${response.status} ${response.statusText}`;
+
+    let headersText = '';
+    response.headers.forEach((value, key) => {
+      headersText += `${key}: ${value}\n`;
+    });
+    headersEl.textContent = headersText || '(no headers)';
+
+    bodyEl.textContent = text || '(empty body)';
+
+    renderPreview(contentType, text, '/upload');
+  } catch (err) {
+    metaEl.textContent = 'Upload failed';
+    headersEl.textContent = '';
+    bodyEl.textContent = String(err);
+    previewEl.innerHTML = `<p class="preview-note">Upload failed.</p>`;
+  }
 }
 
-function deleteFile() {
-  const name = document.getElementById('deleteName').value.trim();
+async function deleteFile() {
+  const input = document.getElementById('deleteName');
+  const name = input.value.trim();
+
   if (!name) {
-    alert('Enter a filename');
+    metaEl.textContent = 'Please enter a file name to delete.';
     return;
   }
-  sendRequest('DELETE', '/upload/' + encodeURIComponent(name));
+
+  const path = `/upload/${encodeURIComponent(name)}`;
+
+  metaEl.textContent = `Deleting ${path} ...`;
+  headersEl.textContent = '';
+  bodyEl.textContent = '';
+  clearPreview();
+
+  try {
+    const response = await fetch(path, {
+      method: 'DELETE'
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+
+    metaEl.textContent = `DELETE ${path} → ${response.status} ${response.statusText}`;
+
+    let headersText = '';
+    response.headers.forEach((value, key) => {
+      headersText += `${key}: ${value}\n`;
+    });
+    headersEl.textContent = headersText || '(no headers)';
+
+    bodyEl.textContent = text || '(empty body)';
+
+    renderPreview(contentType, text, path);
+  } catch (err) {
+    metaEl.textContent = `DELETE ${path} → request failed`;
+    headersEl.textContent = '';
+    bodyEl.textContent = String(err);
+    previewEl.innerHTML = `<p class="preview-note">Delete failed.</p>`;
+  }
+}
+
+function triggerMissingLength411() {
+  const metaEl = document.getElementById('meta');
+  const headersEl = document.getElementById('headers');
+  const bodyEl = document.getElementById('body');
+  const previewEl = document.getElementById('preview');
+  const errorLinkBoxEl = document.getElementById('errorLinkBox');
+
+  metaEl.textContent = '411 test note';
+  headersEl.textContent = '';
+  bodyEl.textContent =
+    'This case is best tested with nc or curl because browsers automatically manage request framing.\n\n' +
+    'Example:\n' +
+    "printf 'POST /upload/test.txt HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\nhello' | nc 127.0.0.1 8080\n\n" +
+    'Expected result: HTTP/1.1 411 Length Required';
+  previewEl.innerHTML = '<p class="preview-note">Use terminal for this parser-level test.</p>';
+  errorLinkBoxEl.innerHTML = `
+    <div class="error-link-card">
+      Open configured error page:
+      <a href="/html_error/411.html" target="_blank" rel="noopener noreferrer">
+        /html_error/411.html
+      </a>
+    </div>
+  `;
+}
+
+async function trigger413OversizedUpload() {
+  const metaEl = document.getElementById('meta');
+  const headersEl = document.getElementById('headers');
+  const bodyEl = document.getElementById('body');
+  const previewEl = document.getElementById('preview');
+  const errorLinkBoxEl = document.getElementById('errorLinkBox');
+
+  metaEl.textContent = 'Loading oversized upload test...';
+  headersEl.textContent = '';
+  bodyEl.textContent = '';
+  previewEl.innerHTML = 'No preview yet.';
+  errorLinkBoxEl.innerHTML = '';
+
+  try {
+    const big = 'A'.repeat(600 * 1024); // 600 KB, above /upload/ 500K
+    const response = await fetch('/upload/oversized_from_browser.txt', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain'
+      },
+      body: big
+    });
+
+    const text = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+
+    metaEl.textContent = `POST /upload/oversized_from_browser.txt → ${response.status} ${response.statusText}`;
+
+    let headersText = '';
+    response.headers.forEach((value, key) => {
+      headersText += `${key}: ${value}\n`;
+    });
+    headersEl.textContent = headersText || '(no headers)';
+    bodyEl.textContent = text || '(empty body)';
+
+    if (response.status === 413) {
+      errorLinkBoxEl.innerHTML = `
+        <div class="error-link-card">
+          Open configured error page:
+          <a href="/html_error/413.html" target="_blank" rel="noopener noreferrer">
+            /html_error/413.html
+          </a>
+        </div>
+      `;
+    }
+
+    if (contentType.includes('text/html')) {
+      previewEl.innerHTML = `<iframe sandbox="allow-same-origin" srcdoc="${text.replace(/"/g, '&quot;')}"></iframe>`;
+    } else {
+      previewEl.innerHTML = '<p class="preview-note">Oversized upload test completed.</p>';
+    }
+  } catch (err) {
+    metaEl.textContent = 'Oversized upload test failed';
+    bodyEl.textContent = String(err);
+    previewEl.innerHTML = '<p class="preview-note">Request failed.</p>';
+  }
 }

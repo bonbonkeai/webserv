@@ -494,6 +494,36 @@ prepare_global_fixtures() {
 
     print_ok "global fixtures prepared"
 }
+
+expect_header_value_equals() {
+    local name="$1"
+    local header_file="$2"
+    local key="$3"
+    local expected="$4"
+
+    local got
+    got="$(header_value_from_file "$header_file" "$key")"
+
+    if [ "$got" = "$expected" ]; then
+        print_ok "$name"
+    else
+        print_fail "$name" "expected [$expected] got [$got]"
+        echo "---- headers ----"
+        cat "$header_file" 2>/dev/null || true
+    fi
+}
+prepare_redirect_fixtures() {
+    section "Redirect 测试准备"
+
+    mkdir -p www/newplace
+    printf "<h1>NEW PLACE</h1>\n" > www/newplace/index.html
+
+    if [ -f "www/newplace/index.html" ]; then
+        print_ok "redirect fixtures prepared"
+    else
+        print_fail "redirect fixtures prepared" "failed to create ./www/newplace/index.html"
+    fi
+}
 # ---------------- 3.1 ----------------
 
 test_valid_get() {
@@ -1787,7 +1817,142 @@ test_error_content_type() {
         cat /tmp/hdr_ct_err.$$ 2>/dev/null || true
     fi
 }
+# ---------------- 3.9 redirection ----------------
 
+test_redirect_301_absolute() {
+    local port="$1"
+    local base="http://$HOST:$port"
+
+    section "3.9.1 301 绝对地址重定向"
+
+    echo "cmd: curl -isS --http1.1 \"$base/redirection/\" | sed -n '1,30p'"
+    local status
+    status="$(curl -sS -D /tmp/h_redir301.$$ "$base/redirection/" --http1.1 \
+        -o /tmp/b_redir301.$$ 2>/tmp/e_redir301.$$ -w '%{http_code}' || true)"
+
+    if [ "$status" = "301" ]; then
+        print_ok "GET /redirection/ returns 301 on $port"
+    else
+        print_fail "GET /redirection/ returns 301 on $port" "expected 301 got $status"
+        echo "---- headers ----"
+        cat /tmp/h_redir301.$$ 2>/dev/null || true
+        echo "---- body ----"
+        cat /tmp/b_redir301.$$ 2>/dev/null || true
+        return
+    fi
+
+    expect_header_present_in_curl_response \
+        "301 response contains Location header on $port" \
+        /tmp/h_redir301.$$ \
+        "location"
+
+    expect_header_value_equals \
+        "301 Location points to expected absolute URL on $port" \
+        /tmp/h_redir301.$$ \
+        "location" \
+        "https://42.fr/en/homepage/"
+
+    expect_content_length_matches_body \
+        "301 response Content-Length matches body on $port" \
+        /tmp/h_redir301.$$ \
+        /tmp/b_redir301.$$
+}
+test_redirect_302_relative() {
+    local port="$1"
+    local base="http://$HOST:$port"
+
+    section "3.9.2 302 站内相对路径重定向"
+
+    echo "cmd: curl -isS --http1.1 \"$base/oldplace/\" | sed -n '1,30p'"
+    local status
+    status="$(curl -sS -D /tmp/h_redir302.$$ "$base/oldplace/" --http1.1 \
+        -o /tmp/b_redir302.$$ 2>/tmp/e_redir302.$$ -w '%{http_code}' || true)"
+
+    if [ "$status" = "302" ]; then
+        print_ok "GET /oldplace/ returns 302 on $port"
+    else
+        print_fail "GET /oldplace/ returns 302 on $port" "expected 302 got $status"
+        echo "---- headers ----"
+        cat /tmp/h_redir302.$$ 2>/dev/null || true
+        echo "---- body ----"
+        cat /tmp/b_redir302.$$ 2>/dev/null || true
+        return
+    fi
+
+    expect_header_present_in_curl_response \
+        "302 response contains Location header on $port" \
+        /tmp/h_redir302.$$ \
+        "location"
+
+    expect_header_value_equals \
+        "302 Location points to expected relative path on $port" \
+        /tmp/h_redir302.$$ \
+        "location" \
+        "/newplace/"
+
+    expect_content_length_matches_body \
+        "302 response Content-Length matches body on $port" \
+        /tmp/h_redir302.$$ \
+        /tmp/b_redir302.$$
+}
+test_redirect_follow_relative() {
+    local port="$1"
+    local base="http://$HOST:$port"
+
+    section "3.9.3 curl -L 跟随 302 到目标页面"
+
+    echo "cmd: curl -isS -L --http1.1 \"$base/oldplace/\" | sed -n '1,40p'"
+    local status
+    status="$(curl -sS -D /tmp/h_redir_follow.$$ -L "$base/oldplace/" --http1.1 \
+        -o /tmp/b_redir_follow.$$ 2>/tmp/e_redir_follow.$$ -w '%{http_code}' || true)"
+
+    if [ "$status" = "200" ]; then
+        print_ok "curl -L follows /oldplace/ to final 200 on $port"
+    else
+        print_fail "curl -L follows /oldplace/ to final 200 on $port" "expected 200 got $status"
+        echo "---- headers ----"
+        cat /tmp/h_redir_follow.$$ 2>/dev/null || true
+        echo "---- body ----"
+        cat /tmp/b_redir_follow.$$ 2>/dev/null || true
+        return
+    fi
+
+    if grep -q '<h1>NEW PLACE</h1>' /tmp/b_redir_follow.$$; then
+        print_ok "curl -L final body matches redirected target on $port"
+    else
+        print_fail "curl -L final body matches redirected target on $port" "expected redirected target body"
+        echo "---- body ----"
+        cat /tmp/b_redir_follow.$$ 2>/dev/null || true
+    fi
+}
+test_redirect_post_behavior() {
+    local port="$1"
+
+    section "3.9.4 POST 到 redirect 路径的当前行为"
+
+    expect_status_from_nc \
+        "POST /redirection/ without length returns 411 on $port" \
+        "411" \
+        "$port" \
+        'POST /redirection/ HTTP/1.1\r\nHost: localhost\r\n\r\n'
+
+    expect_status_from_nc \
+        "POST /redirection/ with Content-Length: 0 returns redirect on $port" \
+        "301" \
+        "$port" \
+        'POST /redirection/ HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n'
+}
+test_redirect_delete_behavior() {
+    local port="$1"
+
+    section "3.9.5 DELETE 到 redirect 路径"
+
+    expect_status_from_nc \
+        "DELETE /redirection/ returns 301 on $port" \
+        "301" \
+        "$port" \
+        'DELETE /redirection/ HTTP/1.1\r\nHost: localhost\r\n\r\n'
+}
 # ---------------- 4. HTTP_Method / 4.1 GET ----------------
 
 test_get_existing_file() {
@@ -2826,6 +2991,14 @@ run_for_port() {
     test_empty_body_response_content_length_zero "$port"
     test_error_content_type "$port"
 
+    section "3.9 Redirect"
+    prepare_redirect_fixtures
+    test_redirect_301_absolute "$port"
+    test_redirect_302_relative "$port"
+    test_redirect_follow_relative "$port"
+    test_redirect_post_behavior "$port"
+    test_redirect_delete_behavior "$port"
+    
     section "4. HTTP_Method / 4.1 GET"
     prepare_http_method_get_fixtures
     test_get_existing_file "$port"
