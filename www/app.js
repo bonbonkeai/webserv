@@ -293,3 +293,35 @@ async function trigger413OversizedUpload() {
     previewEl.innerHTML = '<p class="preview-note">Request failed.</p>';
   }
 }
+function copySiegeCommand() {
+  const cmd = document.getElementById('siegeCommand').textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const metaEl = document.getElementById('meta');
+    if (metaEl) {
+      metaEl.textContent = 'Siege command copied to clipboard.';
+    }
+  }).catch(() => {
+    const metaEl = document.getElementById('meta');
+    if (metaEl) {
+      metaEl.textContent = 'Could not copy automatically. Please copy manually.';
+    }
+  });
+}
+
+function renderSiegeOutput() {
+  const input = document.getElementById('siegeOutput');
+  const result = document.getElementById('siegeResult');
+  const text = input.value.trim();
+
+  if (!text) {
+    result.textContent = 'No siege result yet.';
+    return;
+  }
+
+  result.textContent = text;
+}
+
+function clearSiegeOutput() {
+  document.getElementById('siegeOutput').value = '';
+  document.getElementById('siegeResult').textContent = 'No siege result yet.';
+}

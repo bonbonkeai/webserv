@@ -446,14 +446,54 @@
       curl -i http://127.0.0.1:8080/html_error/404.html
       curl -i http://127.0.0.1:8080/html_error/502.html</code></pre>
     </div>
+  </section>
 
-    <div class="terminal-group">
-      <h3>Parser / protocol edge cases</h3>
-      <p class="expected">What this tests: missing Host, missing length on POST, and request-line level validation.</p>
+  <section>
+    <h2>Stress Test</h2>
+
+    <div class="card">
+      <h3>Siege command</h3>
+      <p>
+        This stress test uses <code>siege</code> to send many concurrent requests
+        to the server root endpoint.
+      </p>
+      <p class="expected">
+        What this tests: concurrency handling, event loop stability, response throughput,
+        and whether the server stays alive under sustained load.
+        If siege is not installed: sudo apt update && sudo apt install siege.
+      </p>
       <pre><code>
-      printf 'GET /hello.txt HTTP/1.1\r\n\r\n' | nc 127.0.0.1 8080
-      printf 'POST /upload/test.txt HTTP/1.1\r\nHost: localhost\r\n\r\nhello' | nc 127.0.0.1 8080
-      printf 'GET /hello.txt HTTP/1.0\r\nHost: localhost\r\n\r\n' | nc 127.0.0.1 8080</code></pre>
+        sudo apt update
+        sudo apt install siege                                              
+                                                                            </code></pre>
+
+      <pre><code id="siegeCommand">siege -c 255 -t 1M http://127.0.0.1:8080/</code></pre>
+
+      <button onclick="copySiegeCommand()">Copy siege command</button>
+    </div>
+
+    <div class="card">
+      <h3>Parameter explanation</h3>
+      <ul>
+        <li><code>siege</code> launches the load testing tool</li>
+        <li><code>-c 255</code> means 255 concurrent simulated clients</li>
+        <li><code>-t 1M</code> means the test runs for 1 minute</li>
+        <li><code>http://127.0.0.1:8080/</code> is the target URL</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>How to read the result</h3>
+      <ul>
+        <li><strong>Transactions</strong> shows how many requests were completed</li>
+        <li><strong>Availability</strong> shows the success rate</li>
+        <li><strong>Elapsed time</strong> shows total test duration</li>
+        <li><strong>Data transferred</strong> shows how much response data was served</li>
+        <li><strong>Response time</strong> shows average latency</li>
+        <li><strong>Transaction rate</strong> shows throughput per second</li>
+        <li><strong>Concurrency</strong> shows how many clients were active on average</li>
+        <li><strong>Failed transactions</strong> helps detect instability or crashes</li>
+      </ul>
     </div>
   </section>
 
