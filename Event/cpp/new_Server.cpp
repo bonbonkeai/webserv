@@ -382,7 +382,7 @@ bool Server::do_read(Client &c)
                     tmpReq.effective = _routing->resolve(tmpReq, c.port, tmpReq._rout);
                     tmpReq.max_body_size = tmpReq.effective.max_body_size;
                     tmpReq.has_effective = true;
-                    // std::cerr << "[DBG] path=" << tmpReq.path
+                    // std::cerr << "[] path=" << tmpReq.path
                     //         << " cl=" << tmpReq.contentLength
                     //         << " limit=" << tmpReq.max_body_size
                     //         << " waitingBody=" << c.parser.isWaitingBody()
@@ -616,6 +616,19 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         req.effective = _default_cfg;
         req.has_effective = true;
     }
+    //411
+     if (req.missing_length_for_post)
+     {
+         HTTPResponse err = buildConfiguredErrorResponse(411, req.effective);
+         bool ka = computeKeepAlive(req, 411);
+         c.is_keep_alive = ka;
+         applyConnectionHeader(err, ka);
+         c.write_buffer = ResponseBuilder::build(err);
+         c.write_pos = 0;
+         c._state = WRITING;
+         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+         return true;
+     }
     // 405
     if (!isMethodAllowed(req.method, req.effective.allowed_methods))
     {
@@ -630,6 +643,7 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
         return (true);
     }
+    
     // 413 body size
     if (req.has_body && req.body.size() > req.effective.max_body_size)
     {
