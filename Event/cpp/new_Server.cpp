@@ -616,19 +616,7 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         req.effective = _default_cfg;
         req.has_effective = true;
     }
-    //411
-     if (req.missing_length_for_post)
-     {
-         HTTPResponse err = buildConfiguredErrorResponse(411, req.effective);
-         bool ka = computeKeepAlive(req, 411);
-         c.is_keep_alive = ka;
-         applyConnectionHeader(err, ka);
-         c.write_buffer = ResponseBuilder::build(err);
-         c.write_pos = 0;
-         c._state = WRITING;
-         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
-         return true;
-     }
+    
     // 405
     if (!isMethodAllowed(req.method, req.effective.allowed_methods))
     {
@@ -643,22 +631,6 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
         return (true);
     }
-    
-    // 413 body size
-    if (req.has_body && req.body.size() > req.effective.max_body_size)
-    {
-        // HTTPResponse err = buildErrorResponse(413);
-        HTTPResponse err = buildConfiguredErrorResponse(413, req.effective);
-        bool ka = computeKeepAlive(req, 413);
-        c.is_keep_alive = ka;
-        applyConnectionHeader(err, ka);
-        c.write_buffer = ResponseBuilder::build(err);
-        c.write_pos = 0;
-        c._state = WRITING;
-        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
-        return true;
-    }
-
     // redirect
     if (req._rout.action == ACTION_REDIRECT)
     {
@@ -676,6 +648,36 @@ bool Server::buildRespForCompletedReq(Client &c, int fd)
         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
         return true;
     }
+    //411
+     if (req.missing_length_for_post)
+     {
+         HTTPResponse err = buildConfiguredErrorResponse(411, req.effective);
+         bool ka = computeKeepAlive(req, 411);
+         c.is_keep_alive = ka;
+         applyConnectionHeader(err, ka);
+         c.write_buffer = ResponseBuilder::build(err);
+         c.write_pos = 0;
+         c._state = WRITING;
+         _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+         return true;
+     }
+    
+    // 413 body size
+    if (req.has_body && req.body.size() > req.effective.max_body_size)
+    {
+        // HTTPResponse err = buildErrorResponse(413);
+        HTTPResponse err = buildConfiguredErrorResponse(413, req.effective);
+        bool ka = computeKeepAlive(req, 413);
+        c.is_keep_alive = ka;
+        applyConnectionHeader(err, ka);
+        c.write_buffer = ResponseBuilder::build(err);
+        c.write_pos = 0;
+        c._state = WRITING;
+        _epoller->modif_event(fd, EPOLLOUT | EPOLLET);
+        return true;
+    }
+
+    
     // //411
     // if (req.missing_length_for_post)
     // {
