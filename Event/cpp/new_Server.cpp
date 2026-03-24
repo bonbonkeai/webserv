@@ -931,6 +931,41 @@ void Server::valide_server_names()
     }
 }
 
+std::vector<std::string> Server::getListenAddresses() const
+{
+    std::vector<std::string> addresses;
+    std::set<int> seen_ports;
+
+    for (size_t i = 0; i < _rt_servers.size(); ++i)
+    {
+        int port = _rt_servers[i].port;
+        if (seen_ports.insert(port).second)
+            addresses.push_back("0.0.0.0:" + toString(port));
+    }
+    return addresses;
+}
+
+void Server::printStartupInfo(const std::string &configPath) const
+{
+    std::vector<std::string> addrs = getListenAddresses();
+
+    std::cout << "========================================" << std::endl;
+    std::cout << "webserv booting" << std::endl;
+    std::cout << "config: " << configPath << std::endl;
+    std::cout << "server blocks: " << _rt_servers.size() << std::endl;
+
+    if (addrs.empty())
+    {
+        std::cout << "listening on: [none]" << std::endl;
+    }
+    else
+    {
+        std::cout << "listening on:" << std::endl;
+        for (size_t i = 0; i < addrs.size(); ++i)
+            std::cout << "  - " << addrs[i] << std::endl;
+    }
+}
+
 bool Server::load_config(const std::string &path)
 {
     ConfigTokenizer tok;

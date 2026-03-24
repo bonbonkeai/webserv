@@ -74,6 +74,10 @@ public:
     void cleanup();
     static void signal_handler(int sig);
 
+    //
+    std::vector<std::string> getListenAddresses() const;
+    void printStartupInfo(const std::string &configPath) const;
+
 private:
     int port_nbr;
     int socketfd;

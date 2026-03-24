@@ -6,14 +6,14 @@ This project was developed as part of the **42 curriculum** by **Jdu**, **Yujin*
 
 ##  Description
 
-**Webserv** is a lightweight HTTP/1.1 web server written in **C++**, inspired by **Nginx**.
+**Webserv** is a lightweight HTTP/1.1 web server written in **C++98**, inspired by **Nginx-style configuration and routing**, with configurable routing, CGI support, and event-driven connection handling.
 
-The goal of this project is to gain a deep understanding of:
+The project aims to explore how a real web server works internally, including:
 
-* How web servers work internally
 * HTTP request parsing and response generation
 * Socket programming and client-server communication
-* Event-driven architectures for handling multiple connections
+* Event-driven handling of multiple simultaneous connections
+* Configurable routing, CGI execution, uploads, redirects, and custom error pages
 
 ---
 
@@ -57,7 +57,7 @@ If no configuration file is specified, the server will attempt to use a default 
 ###  Documentation & References
 
 * Nginx Configuration Documentation
-* RFC 7230–7235 — HTTP/1.1 Specification
+* RFC 7230 and RFC 7231, along with related HTTP/1.1 RFCs (7232–7235)
 * Beej’s Guide to Network Programming
 * Linux manual pages (`man socket`, `bind`, `listen`, `accept`, `poll`, etc.)
 
@@ -78,15 +78,18 @@ All implementation and design decisions were made by the authors.
 
 ##  Additional Sections
 
-###  Features
+### Features
 
-* Supports **GET**, **POST**, and **DELETE** methods
-* Handles **persistent and non-persistent connections**
-* Fully **configurable via a configuration file**
-* **CGI support** for dynamic content (e.g., Python scripts)
-* **Multipart file upload** handling
-* **Custom error pages**
-* **Directory listing (autoindex)** *(optional)*
-* **Non-blocking I/O** using `poll()` or `select()`
+* Supports **GET**, **POST**, and **DELETE**
+* Supports **persistent connections** when allowed by request/response handling
+* **Configurable server and location blocks** inspired by Nginx-style configuration
+* Static file serving with **index resolution**
+* **Directory listing (autoindex)**
+* **CGI execution** for dynamic content (e.g. `.py` and `.sh` scripts)
+* **Multipart and raw upload** handling under upload routes
+* **File deletion** through DELETE requests
+* **Custom error pages** configured through `error_page`
+* **Redirect handling** through `return` rules
+* **Non-blocking event-driven I/O using epoll**
 
 ---
