@@ -14,17 +14,6 @@ bool FileUtils::isSafePath(const std::string& urlPath)
     return (true);
 }
 
-// std::string FileUtils::joinPath(const std::string& root, const std::string& urlPath)
-// {
-//     if (root.empty())
-//         return (urlPath);
-//     if (urlPath.empty())
-//         return (root);
-
-//     if (root[root.size() - 1] == '/')
-//         return (root.substr(0, root.size() - 1) + urlPath);
-//     return (root + urlPath);
-// }
 std::string FileUtils::joinPath(const std::string& a, const std::string& b)
 {
     std::string bb = b;
@@ -52,25 +41,6 @@ bool FileUtils::isDirectory(const std::string& path)
         return (false);
     return (S_ISDIR(st.st_mode));
 }
-
-// bool FileUtils::readAll(const std::string& path, std::string& out)
-// {
-//     std::ifstream ifs(path.c_str(), std::ios::in | std::ios::binary);
-//     if (!ifs.is_open())
-//         return (false);
-
-//     std::string buf;
-//     char tmp[4096];
-//     while (ifs.good())
-//     {
-//         ifs.read(tmp, sizeof(tmp));
-//         std::streamsize n = ifs.gcount();
-//         if (n > 0)
-//             buf.append(tmp, (size_t)n);
-//     }
-//     out.swap(buf);
-//     return (true);
-// }
 
 bool FileUtils::readAll(const std::string& path, std::string& out, int& outErrno)
 {
@@ -180,11 +150,6 @@ bool FileUtils::writeAllBinaryErrno(const std::string& path, const std::string& 
 
 bool FileUtils::writeAllBinary(const std::string& path, const std::string& data)
 {
-    // std::ofstream ofs(path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-    // if (!ofs.is_open())
-    //     return (false);
-    // ofs.write(data.data(), (std::streamsize)data.size());
-    // return (ofs.good());
     int e = 0;
     return (FileUtils::writeAllBinaryErrno(path, data, e));
 }

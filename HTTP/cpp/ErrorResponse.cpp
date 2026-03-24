@@ -98,9 +98,6 @@ static bool uriToPathForErrorPage(const EffectiveConfig& cfg,
 
 HTTPResponse buildConfiguredErrorResponse(int statusCode, const EffectiveConfig& cfg)
 {
-    std::cerr << "[ERRCFG] status=" << statusCode << std::endl;
-    std::cerr << "[ERRCFG] cfg.root=" << cfg.root << std::endl;
-    std::cerr << "[ERRCFG] error_pages.size=" << cfg.error_pages.size() << std::endl;
     HTTPResponse fallback = buildErrorResponse(statusCode);
     std::map<int, ErrorPageRule>::const_iterator it = cfg.error_pages.find(statusCode);
     if (it == cfg.error_pages.end())

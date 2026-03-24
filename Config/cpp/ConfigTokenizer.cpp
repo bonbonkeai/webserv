@@ -15,7 +15,6 @@ bool    ConfigTokenizer::read_file(const std::string& filename)
     }
     std::string content_file((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
-    //std::cout << content_file << std::endl;
     file.close();
     return tokenise_string(content_file);
 }
@@ -141,7 +140,7 @@ std::string ConfigTokenizer::read_number(const std::string& str, size_t& pos)
     return resultat;
 }
 
-void ConfigTokenizer::print_tokens() const
+/*void ConfigTokenizer::print_tokens() const
 {
     for (size_t i = 0; i < _tokens.size(); i++)
     {
@@ -154,7 +153,8 @@ void ConfigTokenizer::print_tokens() const
                   << "Col: " << t.col
                   << std::endl;
     }
-}
+}*/
+
 /* tokenise the string, put the elements in the container of tokens */
 bool    ConfigTokenizer::tokenise_string(const std::string& str)
 {

@@ -5,7 +5,6 @@
 #include "../../HTTP/hpp/HTTPResponse.hpp"
 #include "Config/hpp/EffectiveConfig.hpp"
 #include "HTTP/hpp/ErrorResponse.hpp"
-// #include "Method_Handle/hpp/CGIRequestHandle.hpp"
 
 #include <iostream>
 #include <vector>
@@ -70,9 +69,6 @@ public:
     // IO gestion
     bool write_body(const std::string &body);
     bool read_output(std::string &buffer);
-
-    // timeout
-   // bool check_timeout(unsigned long long now);
 
     bool  is_running()
     {

@@ -7,14 +7,12 @@ HTTPResponse StaticHandle::serveFile(const HTTPRequest& req, const std::string& 
 {
     if (!FileUtils::exists(fullPath))
     {
-        // HTTPResponse r = buildErrorResponse(404);
         HTTPResponse r = buildConfiguredErrorResponse(404, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
     }
     if (FileUtils::isDirectory(fullPath))
     {
-        // HTTPResponse r = buildErrorResponse(403);
         HTTPResponse r = buildConfiguredErrorResponse(403, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
@@ -34,7 +32,6 @@ HTTPResponse StaticHandle::serveFile(const HTTPRequest& req, const std::string& 
     }
     if (sz > MAX_STATIC_FILE)
     {
-        // HTTPResponse r = buildErrorResponse(413);
         HTTPResponse r = buildConfiguredErrorResponse(413, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);
@@ -48,7 +45,6 @@ HTTPResponse StaticHandle::serveFile(const HTTPRequest& req, const std::string& 
             code = 403;
         else
             code = 500;
-        // HTTPResponse r = buildErrorResponse(code);
         HTTPResponse r = buildConfiguredErrorResponse(code, req.effective);
         r.headers["connection"] = (req.keep_alive ? "keep-alive" : "close");
         return (r);

@@ -17,37 +17,6 @@ std::string ErrorPage::load_error_file(const std::string& path)
 
 std::string ErrorPage::get_error_page_path(int status, const ServerConfig& server,LocationConfig* location)
 {
-    // std::string str = toString(status);
-    // /*location override*/
-    // if (location)
-    // {
-    //     std::map<std::string, std::vector<std::string> >::iterator it;
-    //     it = location->directives.find("error_page");
-    //     if (it != location->directives.end())
-    //     {
-    //         const std::vector<std::string>& values = it->second;
-    //         for(size_t i =0; i+1 < values.size(); i+=2)
-    //         {
-    //             if(values[i] == str)
-    //                 return values[i+1];
-    //         }
-    //     }
-    // }
-
-    // /* server*/
-    // std::map<std::string, std::vector<std::string> >::iterator it;
-    // it = location->directives.find("error_page");
-    // if (it != server.directives.end())
-    // {
-    //     const std::vector<std::string>& values = it->second;
-    //     for (size_t i=0; i+1 < values.size(); i += 2)
-    //     {
-    //         if (values[i] == str)
-    //             return values[i+1];
-    //     }
-    // }
-    // /*pas de fichier*/
-    // return "";
     std::string str = toString(status);
 
     // 1) location override

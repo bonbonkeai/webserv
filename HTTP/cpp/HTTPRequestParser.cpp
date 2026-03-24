@@ -274,27 +274,15 @@ static bool hasBareLF(const std::string &s)
 
 bool HTTPRequestParser::parseRequestLine()
 {
-    // if (hasBareLF(_buffer))
-    //     return fail(400);
-
-    // size_t	pos = _buffer.find("\r\n");
-    // if (pos == std::string::npos)
-    // 	return (true);
     std::size_t pos = _buffer.find("\r\n");
     if (pos == std::string::npos)
     {
         //// 请求行还没收全时，只要当前 buffer 里出现裸 LF，就说明请求行本身非法
-        //if (hasBareLF(_buffer))
-        //{
-        //    std::cout << "has bar lf in parserequest" << std::endl;
-        //    return fail(400);
-        //}
         size_t  lf_pos = _buffer.find('\n');
         if (lf_pos != std::string::npos)
         {
             if (lf_pos == 0 || _buffer[lf_pos - 1] != '\r')
             {
-                std::cout << "lf only line, wait for more data" << std::endl;
                 if (_buffer.size() > 8192)
                     return fail(400);
                 return true;
@@ -371,11 +359,6 @@ bool HTTPRequestParser::parseRequestLine()
     {
         return (fail(400));
     }
-    // block '..' => 403
-    // if (_req.uri.find("..") != std::string::npos)
-    // {
-    //     return (fail(403));
-    // }
     _req.keep_alive = (_req.version == "HTTP/1.1");
     splitUri();
     if (!percentDecodePath(_req.path))
@@ -438,39 +421,19 @@ bool HTTPRequestParser::parseHeaders()
             if (_req.version == "HTTP/1.1")
             {
                 if (_req.headers.find("host") == _req.headers.end())
-                {
-                    std::cerr << "[HDR FAIL] missing Host header" << std::endl;
                     return fail(400);
-                }
             }
             // 2)chunked 与 content-length 不能同时存在
             //  if (_req.chunked && _req.has_content_length)
             //      return (fail(400));
             if (_req.chunked && _req.has_content_length)
-            {
-                std::cerr << "[HDR FAIL] both TE and CL present" << std::endl;
                 return fail(400);
-            }
             // 两者都没有 -> 411 Length Required（POST 必须有长度信息（Content-Length 或 chunked），否则 411）
             if (_req.method == "POST")
             {
                 if (!_req.chunked && !_req.has_content_length)
                     return (fail(411));
             }
-            // // POST 若没有长度信息，先记录，后面由 server 层决定是否返回 411
-            // if (_req.method == "POST")
-            // {
-            //     if (!_req.chunked && !_req.has_content_length)
-            //         _req.missing_length_for_post = true;
-            //     else
-            //         _req.missing_length_for_post = false;
-            // }
-            // else
-            // {
-            //     _req.missing_length_for_post = false;
-            // }
-
-
             // 3)如果有 content-length（且没 chunked），决定 body
             //  决定 body
             if (_req.chunked)
@@ -507,13 +470,8 @@ bool HTTPRequestParser::parseHeaders()
         }
         // parse header line
         std::size_t colon = line.find(':');
-        // if (colon == std::string::npos)
-        //     return (fail(400));
         if (colon == std::string::npos)
-        {
-            std::cerr << "[HDR FAIL] missing colon: " << line << std::endl;
             return fail(400);
-        }
         std::string key = line.substr(0, colon);
         std::string val = line.substr(colon + 1);
         // key / val trim
@@ -525,32 +483,20 @@ bool HTTPRequestParser::parseHeaders()
         //  if (!isValidHeaderName(key))
         //      return (fail(400));
         if (!isValidHeaderName(key))
-        {
-            std::cerr << "[HDR FAIL] invalid header name: " << key << std::endl;
             return fail(400);
-        }
         // 5)Host 唯一性（重复 host -> 400）
         if (key == "host")
         {
             //
             if (val.empty())
-            {
-                std::cerr << "[HDR FAIL] empty host " << std::endl;
                 return (fail(400));
-            }
             // Host 头值不能包含逗号（多个host）
             if (val.find(',') != std::string::npos)
-            {
-                std::cerr << "[HDR FAIL] invalid host with comma " << std::endl;
                 return (fail(400));
-            }
             //
             // 1) Host 头重复 -> 400
             if (_req.headers.count("host"))
-            {
-                std::cerr << "[HDR FAIL] multi host " << std::endl;
                 return (fail(400));
-            }
             // 2) absolute-form 情况下，Host 必须与 authority 一致（大小写不敏感）
             if (!_req.authority.empty())
             {
@@ -559,20 +505,14 @@ bool HTTPRequestParser::parseHeaders()
                 toLowerInPlace(host_hdr);
                 toLowerInPlace(authority);
                 if (host_hdr != authority)
-                {
-                    std::cerr << "[HDR FAIL] host not autority " << std::endl;
                     return (fail(400));
-                }
             }
         }
         // 6)Content-Length 严格校验（纯数字、无溢出、唯一性）
         if (key == "content-length")
         {
             if (_req.has_content_length)
-            {
-                std::cerr << "[HDR FAIL] has_content_length" << std::endl;
                 return (fail(400));
-            }
             std::size_t n = 0;
             // if (!parseContentLengthStrict(val, n, MAX_BODY))
             //     return (fail(400));
@@ -586,30 +526,10 @@ bool HTTPRequestParser::parseHeaders()
             continue;
         }
         // 7)Transfer-Encoding 只支持 chunked，且唯一性
-        //  if (key == "transfer-encoding")
-        //  {
-        //      if (_req.has_transfer_encoding)
-        //          return (fail(400));
-        //      _req.has_transfer_encoding = true;
-        //      std::string te = val;
-        //      toLowerInPlace(te);
-        //      ltrimSpaces(te);
-        //      rtrimSpaces(te);
-        //      // 只要包含 chunked 就认为 chunked
-        //      if (te == "chunked")
-        //          _req.chunked = true;
-        //      else
-        //          return fail(501);
-        //      _req.headers[key] = val;
-        //      continue;
-        //  }
         if (key == "transfer-encoding")
         {
             if (_req.has_transfer_encoding)
-            {
-                std::cerr << "[HDR FAIL] has_transfer_encoding" << std::endl;
                 return fail(400);
-            }
             _req.has_transfer_encoding = true;
             std::string te = val;
             toLowerInPlace(te);
@@ -621,20 +541,14 @@ bool HTTPRequestParser::parseHeaders()
                 ltrimSpaces(token);
                 rtrimSpaces(token);
                 if (token.empty())
-                {
-                    std::cerr << "[HDR FAIL] token empty" << std::endl;
                     return fail(400);
-                }
                 //     if (token == "chunked")
                 //         found_chunked = true;
                 // }
                 if (token == "chunked")
                 {
                     if (found_chunked)
-                    {
-                        std::cerr << "[HDR FAIL] multi chunked" << std::endl;
                         return fail(400); // 重复 chunked 也直接拒绝
-                    }
                     found_chunked = true;
                 }
                 else
@@ -654,26 +568,6 @@ bool HTTPRequestParser::parseHeaders()
     }
     return (true);
 }
-
-// bool HTTPRequestParser::parseBody()
-// {
-//     //WAIT_BODY 必须有 Content-Length
-//     if (!_req.has_content_length)
-//         return (fail(400));
-//     //等待足够的 body 数据
-//     if (_buffer.size() < _req.contentLength)
-//         return (true);
-//     //精确读取 body（可能为 0，一般不会在 0 时进入 WAIT_BODY）
-//     if (_req.contentLength > 0)
-//         _req.body = _buffer.substr(0, _req.contentLength);
-//     else
-//         _req.body.clear();
-//     _buffer.erase(0, _req.contentLength);
-//     //完成
-//     _req.complet = true;
-//     _state = PARSE_DONE;
-//     return (true);
-// }
 
 bool HTTPRequestParser::parseFixedBody()
 {
