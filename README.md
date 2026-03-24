@@ -1,61 +1,92 @@
+# **Webserv**
 
-WebServe
+This project was developed as part of the **42 curriculum** by **Jdu**, **Yujin**, and **Jmen**.
 
-This project has been created as part of the 42 curriculum by Jdu, Yujin, Jmen. 
+---
 
-Description
-A Nginx-like webserver in C++
+##  Description
 
-Instructions
-Compilation
+**Webserv** is a lightweight HTTP/1.1 web server written in **C++**, inspired by **Nginx**.
 
-The project includes a Makefile with the following standard rules:
-make        # Compiles the server binary
-make clean  # Removes object files
-make fclean # Removes object files and the binary
-make re     # Recompiles the entire project
+The goal of this project is to gain a deep understanding of:
 
-The server is written in C++98 and uses no external libraries aside from the standard C++ and POSIX libraries.
+* How web servers work internally
+* HTTP request parsing and response generation
+* Socket programming and client-server communication
+* Event-driven architectures for handling multiple connections
 
-Dependencies
+---
 
- • C++98-compliant compiler (clang++/g++)
+##  Instructions
 
- • Make
+###  Compilation
 
- • POSIX-compliant operating system (Linux, macOS)
+The project includes a **Makefile** with the following standard rules:
 
-Execution
+```bash id="c6v5gm"
+make        # Compile the server
+make clean  # Remove object files
+make fclean # Remove object files and binary
+make re     # Recompile the project
+```
 
-To start the server, provide a configuration file as an argument:
+---
 
-./webserve [configuration_file]
+###  Dependencies
 
-If no configuration file is specified, the server will attempt to use a default default.conf in the current directory.
+* **C++98-compliant compiler** (e.g., `clang++`, `g++`)
+* **Make**
+* **POSIX-compliant operating system** (Linux, macOS)
 
-Resources
+---
 
-Documentation & References
+###  Execution
 
-Nginx Configuration Documentation
+To start the server, run:
 
+```bash id="a2l9wr"
+./webserv [configuration_file]
+```
 
-Additional Sections
-Features
+If no configuration file is specified, the server will attempt to use a default `default.conf` in the current directory.
 
-    Supports GET, POST, and DELETE methods
+---
 
-    Handles persistent and non-persistent connections
+##  Resources
 
-    Configurable via a flexible configuration file
+###  Documentation & References
 
-    CGI support for dynamic content (e.g., Python scripts)
+* Nginx Configuration Documentation
+* RFC 7230–7235 — HTTP/1.1 Specification
+* Beej’s Guide to Network Programming
+* Linux manual pages (`man socket`, `bind`, `listen`, `accept`, `poll`, etc.)
 
-    Multipart file upload handling
+---
 
-    Custom error pages
+###  Use of AI
 
-    Directory listing support (optional)
+AI tools (such as ChatGPT) were used for:
 
-    Non-blocking I/O with poll() or select()
+* Understanding HTTP protocol concepts
+* Debugging and clarifying error messages
+* Explaining networking and system calls
+* Improving documentation and formatting
 
+All implementation and design decisions were made by the authors.
+
+---
+
+##  Additional Sections
+
+###  Features
+
+* Supports **GET**, **POST**, and **DELETE** methods
+* Handles **persistent and non-persistent connections**
+* Fully **configurable via a configuration file**
+* **CGI support** for dynamic content (e.g., Python scripts)
+* **Multipart file upload** handling
+* **Custom error pages**
+* **Directory listing (autoindex)** *(optional)*
+* **Non-blocking I/O** using `poll()` or `select()`
+
+---
