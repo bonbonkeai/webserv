@@ -86,6 +86,9 @@ private:
     std::vector<int> _listen_fds;
     std::map<int, int> _fd_to_port;
 
+    //
+    std::map<int, std::string> _fd_to_host;
+    //
     static volatile sig_atomic_t g_running;
 
     Epoller *_epoller;

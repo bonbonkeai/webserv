@@ -525,7 +525,15 @@ bool HTTPRequestParser::parseHeaders()
             _req.headers[key] = val;
             continue;
         }
-        // 7)Transfer-Encoding 只支持 chunked，且唯一性
+        //7)content_type repetive
+        if (key == "content-type")
+        {
+            if (_req.headers.count("content-type"))
+                return fail(400);
+            _req.headers[key] = val;
+            continue;
+        }
+        // 8)Transfer-Encoding 只支持 chunked，且唯一性
         if (key == "transfer-encoding")
         {
             if (_req.has_transfer_encoding)

@@ -56,7 +56,13 @@ section() {
     echo -e "${CYAN}${BOLD}==== $1 ====${NC}"
 }
 
+restore_fixtures() {
+    mkdir -p www
+    printf "HELLO\n" > www/hello.txt
+}
+
 cleanup() {
+    restore_fixtures
     if [ -n "${SERVER_PID:-}" ]; then
         kill "$SERVER_PID" >/dev/null 2>&1 || true
         wait "$SERVER_PID" 2>/dev/null || true
@@ -1391,6 +1397,28 @@ test_content_length_nondigit_400() {
         'POST /upload/cl_nondigit.txt HTTP/1.1\r\nHost: localhost\r\nContent-Length: abc\r\n\r\n'
 }
 
+test_duplicate_content_type_400() {
+    local port="$1"
+    section "3.6.13 重复 Content-Type -> 400"
+
+    expect_status_from_nc \
+        "duplicate Content-Type rejected on $port" \
+        "400" \
+        "$port" \
+        'POST /upload/test.txt HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\nContent-Type: application/json\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello'
+
+    expect_status_from_nc \
+        "duplicate Content-Type with different case rejected on $port" \
+        "400" \
+        "$port" \
+        'POST /upload/test2.txt HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\ncontent-type: application/json\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello'
+
+    expect_status_from_nc \
+        "duplicate identical Content-Type rejected on $port" \
+        "400" \
+        "$port" \
+        'POST /upload/test3.txt HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\nContent-Type: text/plain\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello'
+}
 # ---------------- 3.7 ----------------
 
 test_fixed_body_incremental() {
@@ -2972,6 +3000,7 @@ run_for_port() {
     test_chunk_incomplete_and_badsize "$port"
     test_transfer_encoding_mixed_tokens "$port"
     test_content_length_nondigit_400 "$port"
+    test_duplicate_content_type_400 "$port"
 
     section "3.7 Body"
     test_fixed_body_incremental "$port"

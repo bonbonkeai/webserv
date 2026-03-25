@@ -109,6 +109,9 @@ void Server::cleanup()
         }
         _listen_fds.clear();
         _fd_to_port.clear();
+        //
+        _fd_to_host.clear();
+        //
         socketfd = -1;
     }
 
@@ -134,30 +137,78 @@ void Server::cleanup()
     }
 }
 
+// bool Server::init_sockets()
+// {
+//     std::set<int> ports;
+//     for (size_t i = 0; i < _rt_servers.size(); i++)
+//         ports.insert(_rt_servers[i].port);
+//     for (std::set<int>::iterator it = ports.begin(); it != ports.end(); ++it)
+//     {
+//         int fd = socket(AF_INET, SOCK_STREAM, 0);
+//         if (fd < 0)
+//             throw std::runtime_error("Socket create failed");
+//         int yes = 1;
+//         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+//         struct sockaddr_in serveraddr;
+//         std::memset(&serveraddr, 0, sizeof(serveraddr));
+//         serveraddr.sin_family = AF_INET;
+//         serveraddr.sin_port = htons(*it);
+//         serveraddr.sin_addr.s_addr = INADDR_ANY;
+//         if (bind(fd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
+//             throw std::runtime_error("Socket bind failed");
+//         if (listen(fd, 256) < 0)
+//             throw std::runtime_error("Listen socket failed");
+//         _listen_fds.push_back(fd);
+//         _fd_to_port[fd] = *it;
+//     }
+//     if (!_listen_fds.empty())
+//     {
+//         socketfd = _listen_fds[0];
+//         port_nbr = _fd_to_port[socketfd];
+//     }
+//     return (_epoller->init(128));
+// }
 bool Server::init_sockets()
 {
-    std::set<int> ports;
-    for (size_t i = 0; i < _rt_servers.size(); i++)
-        ports.insert(_rt_servers[i].port);
-    for (std::set<int>::iterator it = ports.begin(); it != ports.end(); ++it)
+    std::set< std::pair<std::string, int> > listeners;
+
+    for (size_t i = 0; i < _rt_servers.size(); ++i)
+        listeners.insert(std::make_pair(_rt_servers[i].host, _rt_servers[i].port));
+
+    for (std::set< std::pair<std::string, int> >::iterator it = listeners.begin();
+         it != listeners.end(); ++it)
     {
+        const std::string &host = it->first;
+        int port = it->second;
+
         int fd = socket(AF_INET, SOCK_STREAM, 0);
         if (fd < 0)
             throw std::runtime_error("Socket create failed");
+
         int yes = 1;
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+
         struct sockaddr_in serveraddr;
         std::memset(&serveraddr, 0, sizeof(serveraddr));
         serveraddr.sin_family = AF_INET;
-        serveraddr.sin_port = htons(*it);
-        serveraddr.sin_addr.s_addr = INADDR_ANY;
+        serveraddr.sin_port = htons(port);
+
+        if (host.empty() || host == "0.0.0.0")
+            serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+        else if (inet_pton(AF_INET, host.c_str(), &serveraddr.sin_addr) != 1)
+            throw std::runtime_error("Invalid listen host: " + host);
+
         if (bind(fd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
             throw std::runtime_error("Socket bind failed");
+
         if (listen(fd, 256) < 0)
             throw std::runtime_error("Listen socket failed");
+
         _listen_fds.push_back(fd);
-        _fd_to_port[fd] = *it;
+        _fd_to_port[fd] = port;
+        _fd_to_host[fd] = host;
     }
+
     if (!_listen_fds.empty())
     {
         socketfd = _listen_fds[0];
@@ -905,42 +956,84 @@ void Server::run()
 // (Server.hpp still declares this; keep it linked.)
 // --------------------
 
+// void Server::valide_server_names()
+// {
+//     std::map<int, std::set<std::string> > port_to_names;
+
+//     for (size_t i = 0; i < _rt_servers.size(); ++i)
+//     {
+//         const ServerRuntimeConfig &srv = _rt_servers[i];
+//         int port = srv.port;
+//         const std::string &name = srv.server_name;
+
+//         // 空 server_name 是允许的（作为 default server）
+//         if (name.empty())
+//             continue;
+
+//         // 检查这个端口上是否已经有同名 server
+//         if (port_to_names[port].count(name))
+//         {
+//             throw std::runtime_error(
+//                 "Duplicate server_name '" + name +
+//                 "' on port " + toString(port));
+//         }
+
+//         port_to_names[port].insert(name);
+//     }
+// }
 void Server::valide_server_names()
 {
-    std::map<int, std::set<std::string> > port_to_names;
+    std::map< std::pair<std::string, int>, std::set<std::string> > addr_to_names;
 
     for (size_t i = 0; i < _rt_servers.size(); ++i)
     {
         const ServerRuntimeConfig &srv = _rt_servers[i];
-        int port = srv.port;
+        std::pair<std::string, int> key = std::make_pair(srv.host, srv.port);
         const std::string &name = srv.server_name;
 
-        // 空 server_name 是允许的（作为 default server）
         if (name.empty())
             continue;
 
-        // 检查这个端口上是否已经有同名 server
-        if (port_to_names[port].count(name))
+        if (addr_to_names[key].count(name))
         {
+            std::string shownHost = srv.host.empty() ? "0.0.0.0" : srv.host;
             throw std::runtime_error(
                 "Duplicate server_name '" + name +
-                "' on port " + toString(port));
+                "' on " + shownHost + ":" + toString(srv.port));
         }
 
-        port_to_names[port].insert(name);
+        addr_to_names[key].insert(name);
     }
 }
 
+// std::vector<std::string> Server::getListenAddresses() const
+// {
+//     std::vector<std::string> addresses;
+//     std::set<int> seen_ports;
+
+//     for (size_t i = 0; i < _rt_servers.size(); ++i)
+//     {
+//         int port = _rt_servers[i].port;
+//         if (seen_ports.insert(port).second)
+//             addresses.push_back("0.0.0.0:" + toString(port));
+//     }
+//     return addresses;
+// }
 std::vector<std::string> Server::getListenAddresses() const
 {
     std::vector<std::string> addresses;
-    std::set<int> seen_ports;
+    std::set< std::pair<std::string, int> > seen;
 
     for (size_t i = 0; i < _rt_servers.size(); ++i)
     {
+        const std::string &host = _rt_servers[i].host;
         int port = _rt_servers[i].port;
-        if (seen_ports.insert(port).second)
-            addresses.push_back("0.0.0.0:" + toString(port));
+
+        if (seen.insert(std::make_pair(host, port)).second)
+        {
+            std::string shownHost = host.empty() ? "0.0.0.0" : host;
+            addresses.push_back(shownHost + ":" + toString(port));
+        }
     }
     return addresses;
 }
