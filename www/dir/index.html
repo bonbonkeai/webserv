@@ -292,15 +292,14 @@
 
     <div class="test-item">
       <div>
-        <button disabled>Use curl for this test</button>
+        <button onclick="sendRequest('GET', '/../secret')">Trigger 403 via forbidden path traversal</button>
         <p class="expected">
           Expected result: <code>403 Forbidden</code>.
         </p>
         <p class="explain">
-          This test checks whether the server rejects path traversal attempts using
-          <code>..</code>. Browsers may normalize paths such as <code>/../secret</code>
-          before sending the request, so this case should be tested with:
-          <code>curl -i --path-as-is http://127.0.0.1:8080/../secret</code>
+          What this tests: the request path attempts to escape the allowed root using
+          <code>..</code>. The parser or path normalization logic should reject it and
+          return 403 instead of serving anything outside the configured root.
         </p>
         <p>
           <a href="/html_error/403.html" target="_blank" rel="noopener noreferrer">

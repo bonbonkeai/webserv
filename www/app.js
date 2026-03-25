@@ -52,10 +52,13 @@ function renderPreview(contentType, text, url) {
 }
 
 async function sendRequest(method, path) {
+  const errorLinkBoxEl = document.getElementById('errorLinkBox');
+
   metaEl.textContent = `Loading ${method} ${path} ...`;
   headersEl.textContent = '';
   bodyEl.textContent = '';
   clearPreview();
+  errorLinkBoxEl.innerHTML = '';
 
   try {
     const response = await fetch(path, {
@@ -76,12 +79,40 @@ async function sendRequest(method, path) {
 
     bodyEl.textContent = text || '(empty body)';
 
+    const errorPageMap = {
+      400: '/html_error/400.html',
+      403: '/html_error/403.html',
+      404: '/html_error/404.html',
+      405: '/html_error/405.html',
+      408: '/html_error/408.html',
+      411: '/html_error/411.html',
+      413: '/html_error/413.html',
+      414: '/html_error/414.html',
+      500: '/html_error/500.html',
+      501: '/html_error/501.html',
+      502: '/html_error/502.html',
+      504: '/html_error/504.html'
+    };
+
+    const errorPage = errorPageMap[response.status];
+    if (errorPage) {
+      errorLinkBoxEl.innerHTML = `
+        <div class="error-link-card">
+          Open configured error page:
+          <a href="${errorPage}" target="_blank" rel="noopener noreferrer">
+            ${errorPage}
+          </a>
+        </div>
+      `;
+    }
+
     renderPreview(contentType, text, path);
   } catch (err) {
     metaEl.textContent = `${method} ${path} → request failed`;
     headersEl.textContent = '';
     bodyEl.textContent = String(err);
     previewEl.innerHTML = `<p class="preview-note">Request failed.</p>`;
+    errorLinkBoxEl.innerHTML = '';
   }
 }
 
@@ -324,4 +355,46 @@ function renderSiegeOutput() {
 function clearSiegeOutput() {
   document.getElementById('siegeOutput').value = '';
   document.getElementById('siegeResult').textContent = 'No siege result yet.';
+}
+
+function clearErrorLink() {
+  const errorLinkBoxEl = document.getElementById('errorLinkBox');
+  if (errorLinkBoxEl) {
+    errorLinkBoxEl.innerHTML = '';
+  }
+}
+
+function renderErrorLink(status) {
+  const errorLinkBoxEl = document.getElementById('errorLinkBox');
+  if (!errorLinkBoxEl) return;
+
+  const errorPageMap = {
+    400: '/html_error/400.html',
+    403: '/html_error/403.html',
+    404: '/html_error/404.html',
+    405: '/html_error/405.html',
+    408: '/html_error/408.html',
+    411: '/html_error/411.html',
+    413: '/html_error/413.html',
+    414: '/html_error/414.html',
+    500: '/html_error/500.html',
+    501: '/html_error/501.html',
+    502: '/html_error/502.html',
+    504: '/html_error/504.html'
+  };
+
+  const errorPage = errorPageMap[status];
+  if (!errorPage) {
+    errorLinkBoxEl.innerHTML = '';
+    return;
+  }
+
+  errorLinkBoxEl.innerHTML = `
+    <div class="error-link-card">
+      Open configured error page:
+      <a href="${errorPage}" target="_blank" rel="noopener noreferrer">
+        ${errorPage}
+      </a>
+    </div>
+  `;
 }
