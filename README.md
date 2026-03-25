@@ -1,6 +1,6 @@
 # **Webserv**
 
-This project was developed as part of the **42 curriculum** by **Jdu**, **Yujin**, and **Jmen**.
+*This project was developed as part of the 42 curriculum by Jdu, Yujin, and Jmen.*
 
 ---
 
