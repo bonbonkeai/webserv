@@ -2542,6 +2542,7 @@ test_post_missing_length_411_method_group() {
         'POST / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'
 }
 
+
 # ---------------- 4. HTTP_Method / 4.3 DELETE ----------------
 
 test_delete_existing_file() {
@@ -2927,6 +2928,24 @@ test_cgi_nonexistent_with_path_info() {
     fi
 }
 
+test_cgi_empty_post_behavior() {
+    local port="$1"
+
+    section "CGI empty POST 行为"
+
+    expect_status_from_nc \
+        "CGI POST without length info returns 411 on $port" \
+        "411" \
+        "$port" \
+        'POST /cgi-bin/echo_body.sh HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+
+    expect_status_from_nc \
+        "CGI POST with Content-Length: 0 returns 200 on $port" \
+        "200" \
+        "$port" \
+        'POST /cgi-bin/echo_body.sh HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+}
+
 run_for_port() {
     local port="$1"
 
@@ -3060,6 +3079,7 @@ run_for_port() {
     prepare_cgi_env_fixtures
     test_cgi_env_basic "$port"
     test_cgi_echo_body_post "$port"
+    test_cgi_empty_post_behavior "$port"
     test_cgi_uri_query_basic "$port"
     test_cgi_path_info "$port"
     test_cgi_nonexistent_with_path_info "$port"

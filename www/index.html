@@ -330,7 +330,7 @@
 
     <div class="test-item">
       <div>
-        <button onclick="triggerMissingLength411()">Trigger 411 via POST without Content-Length</button>
+        <button onclick="triggerMissingLength411()">Show 411 test command</button>
         <p class="expected">
           Expected result: <code>411 Length Required</code>.
         </p>
@@ -338,6 +338,14 @@
           What this tests: an HTTP/1.1 POST request without <code>Content-Length</code>
           and without <code>Transfer-Encoding: chunked</code> should be rejected according
           to your parser and request validation rules.
+        </p>
+        <p class="explain">
+          This case cannot be reliably triggered from the browser because browsers automatically
+          add or manage request framing headers. Use the following terminal command instead:
+        </p>
+        <pre><code>printf 'POST /upload/test.txt HTTP/1.1\r\nHost: localhost\r\n\r\nhello' | nc 127.0.0.1 8080</code></pre>
+        <p class="explain">
+          Expected first line: <code>HTTP/1.1 411 Length Required</code>
         </p>
         <p>
           <a href="/html_error/411.html" target="_blank" rel="noopener noreferrer">

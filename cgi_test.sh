@@ -116,8 +116,9 @@ echo "SCRIPT_NAME=$SCRIPT_NAME"
 echo "PATH_INFO=$PATH_INFO"
 echo "SERVER_PORT=$SERVER_PORT"
 echo "REMOTE_ADDR=$REMOTE_ADDR"
-if [ "$REQUEST_METHOD" = "POST" ] && [ -n "$CONTENT_LENGTH" ] && [ "$CONTENT_LENGTH" -gt 0 ]; then
-    echo "BODY=$(dd bs=1 count=$CONTENT_LENGTH 2>/dev/null)"
+if [ "$REQUEST_METHOD" = "POST" ] && [ "$CONTENT_LENGTH" -gt 0 ] 2>/dev/null; then
+    echo ""
+    echo "BODY=$(cat)"
 fi
 SCRIPT
         chmod +x "$CGI_DIR/test_env.sh"
@@ -261,7 +262,7 @@ test_errors() {
     fi
 
     code=$(http_code "$BASE/cgi-bin/test_crash.sh")
-    check_code "crashing script returns 500" "500" "$code"
+    check_code "crashing script returns 502" "502" "$code"
 }
 
 # ============================================================
@@ -578,14 +579,14 @@ echo -e "CGI dir:    ${CYAN}$CGI_DIR${NC}"
 echo -e "Upload dir: ${CYAN}$UPLOAD_DIR${NC}"
 
 setup_scripts
-#test_basic_get
-#test_query_string
-#test_post
-#test_path_info
-#test_errors
-#test_timeout
-#test_large_output
-#test_concurrent
-#test_keepalive
+test_basic_get
+test_query_string
+test_post
+test_path_info
+test_errors
+test_timeout
+test_large_output
+test_concurrent
+test_keepalive
 test_upload
 print_summary
